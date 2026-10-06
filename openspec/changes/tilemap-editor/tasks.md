@@ -1,7 +1,7 @@
 ## 1. Project setup
 
-- [ ] 1.1 Scaffold Vite + TypeScript app (no framework) and verify `npm run dev` serves a blank page and `npm run build` succeeds
-- [ ] 1.2 Add Vitest and a fixture loader for `office/Office.json`, `map.json`, `spritesheet.png`; verify a trivial test reading the fixtures passes
+- [x] 1.1 Scaffold Vite + TypeScript app (no framework) and verify `npm run dev` serves a blank page and `npm run build` succeeds
+- [x] 1.2 Add Vitest and a fixture loader for `office/Office.json`, `map.json`, `spritesheet.png`; verify a trivial test reading the fixtures passes
 
 ## 2. Project model and IO (project-io)
 
