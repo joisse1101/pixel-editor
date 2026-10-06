@@ -40,7 +40,7 @@
 ## 6. Help icon
 
 - [x] 6.1 Add the "?" toolbar button and hover/focus panel with grouped controls (palette, brush, selection, delete, layers, navigation, shortcuts) in `main.ts` and `style.css`; verify by hover and by Tab focus that it shows, and that Esc and moving away hide it
-- [ ] 6.2 Verify the panel does not cover or block the map when hidden and fits the window width at 1280px
+- [x] 6.2 Verify the panel does not cover or block the map when hidden and fits the window width at 1280px
 
 ## 7. Docs and wrap-up
 
