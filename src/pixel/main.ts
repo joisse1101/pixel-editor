@@ -254,13 +254,13 @@ $('new-btn').addEventListener('click', () => void newImage());
 $('resize').addEventListener('click', () => void resizeCanvas());
 $('flip-h').addEventListener('click', () => doc.flip('h'));
 $('flip-v').addEventListener('click', () => doc.flip('v'));
-for (const [id, dir] of [['rot-ccw', 'ccw'], ['rot-cw', 'cw']] as const) {
-  $(id).addEventListener('click', () => {
-    const [w, h] = [doc.width, doc.height];
-    doc.rotate(dir);
-    if (doc.width !== w || doc.height !== h) view.fit();
-  });
+function rotate(dir: 'cw' | 'ccw'): void {
+  const [w, h] = [doc.width, doc.height];
+  doc.rotate(dir);
+  if (doc.width !== w || doc.height !== h) view.fit();
 }
+$('rot-ccw').addEventListener('click', () => rotate('ccw'));
+$('rot-cw').addEventListener('click', () => rotate('cw'));
 $('fit').addEventListener('click', () => {
   view.fit();
   refreshStatus();
@@ -285,6 +285,33 @@ function visibleRect() {
 window.addEventListener('keydown', (e) => {
   if (typing(e.target)) return;
   const mod = e.ctrlKey || e.metaKey;
+  const key = e.key.toLowerCase();
+  if (!mod && !e.altKey) {
+    const tool = TOOLS.find((t) => t.key.toLowerCase() === key);
+    if (tool) {
+      if (!tools.active) setTool(tool.id);
+      return;
+    }
+    const action: Record<string, () => void> = {
+      x: () => doc.flip('h'),
+      y: () => doc.flip('v'),
+      '[': () => rotate('ccw'),
+      ']': () => rotate('cw'),
+    };
+    if (action[key] && !tools.active) {
+      action[key]();
+      return;
+    }
+  }
+  if (mod && !tools.active && ['z', 'y', 's', 'o', 'n'].includes(key)) {
+    e.preventDefault();
+    if (key === 'z') (e.shiftKey ? doc.redo() : doc.undo());
+    else if (key === 'y') doc.redo();
+    else if (key === 's') void saveImage(e.shiftKey);
+    else if (key === 'o') void openImage();
+    else void newImage();
+    return;
+  }
   if (e.key === 'Escape') {
     if (!tools.cancelDrag()) doc.cancel();
   } else if (mod && e.key.toLowerCase() === 'c') {
