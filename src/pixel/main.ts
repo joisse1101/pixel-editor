@@ -18,6 +18,17 @@ const TOOLS: { id: Tool; label: string; key: string }[] = [
   { id: 'select', label: 'Select', key: 'S' },
 ];
 
+/** Tool names with their shortcut key marked. */
+const LABELS: Record<string, string> = {
+  Pencil: '(P)encil',
+  Eraser: '(E)raser',
+  Eyedropper: 'Eyedropper (I)',
+  Fill: 'Fill (G)',
+  Line: '(L)ine',
+  Rectangle: '(R)ectangle',
+  Select: '(S)elect',
+};
+
 const app = document.getElementById('app')!;
 mountNav('pixel');
 app.insertAdjacentHTML(
@@ -44,6 +55,44 @@ app.insertAdjacentHTML(
     <button id="resize" type="button" title="Resize canvas">Resize</button>
     <label><input id="grid" type="checkbox" checked /> Grid</label>
     <button id="fit" type="button" title="Fit image in view">Fit</button>
+    <span id="help" class="help" tabindex="0" role="button" aria-label="Controls help">
+      ?
+      <div class="help-panel">
+        <h4>Drawing</h4>
+        <dl>
+          <dt><kbd>Click / Drag</kbd></dt><dd>Draw with the current tool</dd>
+          <dt><kbd>Right-click / drag</kbd></dt><dd>Erase</dd>
+          <dt><kbd>Alt + Click</kbd></dt><dd>Pick the colour under the cursor</dd>
+        </dl>
+        <h4>Line / Rectangle tool</h4>
+        <dl>
+          <dt><kbd>Drag</kbd></dt><dd>Draw the shape</dd>
+          <dt><kbd>Shift + Drag</kbd></dt><dd>Snap line angle / make a square</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Cancel the shape</dd>
+        </dl>
+        <h4>Select tool</h4>
+        <dl>
+          <dt><kbd>Drag</kbd></dt><dd>Select an area</dd>
+          <dt><kbd>Drag inside selection</kbd></dt><dd>Move it</dd>
+          <dt><kbd>Alt + Drag</kbd></dt><dd>Copy it</dd>
+          <dt><kbd>Ctrl + C / Ctrl + V</kbd></dt><dd>Copy / paste</dd>
+          <dt><kbd>Del</kbd></dt><dd>Delete selection</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Clear selection</dd>
+        </dl>
+        <h4>View</h4>
+        <dl>
+          <dt><kbd>Wheel</kbd></dt><dd>Zoom</dd>
+          <dt><kbd>Middle-drag / Space + Drag</kbd></dt><dd>Pan</dd>
+        </dl>
+        <h4>Keys</h4>
+        <dl>
+          <dt><kbd>X / Y</kbd></dt><dd>Flip horizontally / vertically</dd>
+          <dt><kbd>[ / ]</kbd></dt><dd>Rotate counter-clockwise / clockwise</dd>
+          <dt><kbd>Ctrl + Z / Ctrl + Y</kbd></dt><dd>Undo / redo</dd>
+          <dt><kbd>Ctrl + N / O / S</kbd></dt><dd>New / Open / Save</dd>
+        </dl>
+      </div>
+    </span>
   </header>
   <div class="main">
     <aside class="px-tools panel">
@@ -122,7 +171,7 @@ for (const t of TOOLS) {
   b.type = 'button';
   b.dataset.tool = t.id;
   b.title = `${t.label} (${t.key})`;
-  b.textContent = t.label;
+  b.textContent = LABELS[t.label] ?? t.label;
   b.addEventListener('click', () => setTool(t.id));
   toolList.append(b);
 }
@@ -313,6 +362,7 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === 'Escape') {
+    if (hideHelp()) return;
     if (!tools.cancelDrag()) doc.cancel();
   } else if (mod && e.key.toLowerCase() === 'c') {
     e.preventDefault();
@@ -325,6 +375,17 @@ window.addEventListener('keydown', (e) => {
     doc.deleteSelection();
   }
 });
+/** Esc closes the help panel first. The panel itself is CSS-only (:hover and :focus-within). */
+const help = $('help');
+function hideHelp(): boolean {
+  if (help.classList.contains('dismissed') || !help.matches(':hover, :focus-within')) return false;
+  help.classList.add('dismissed');
+  help.blur();
+  return true;
+}
+help.addEventListener('mouseleave', () => help.classList.remove('dismissed'));
+help.addEventListener('focusout', () => help.classList.remove('dismissed'));
+
 // Warn before the tab closes or reloads with unsaved edits.
 window.addEventListener('beforeunload', (e) => {
   if (!doc.isDirty) return;
