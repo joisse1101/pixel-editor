@@ -56,11 +56,15 @@ export async function saveText(
   }
 }
 
-function download(text: string, name: string): void {
-  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+export function downloadBytes(data: BlobPart | Uint8Array, name: string, type: string): void {
+  const url = URL.createObjectURL(new Blob([data as BlobPart], { type }));
   const a = document.createElement('a');
   a.href = url;
   a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+export const downloadText = (text: string, name: string): void => downloadBytes(text, name, 'application/json');
+
+const download = downloadText;

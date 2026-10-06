@@ -41,14 +41,14 @@
 
 ## 7. Phaser bake (phaser-export)
 
-- [ ] 7.1 Implement tile variant rendering and pixel-hash dedupe with first-seen GID assignment; verify the sample bakes to <= 104 unique tiles (unit test)
-- [ ] 7.2 Pack the spritesheet 8 columns wide with growing height and verify width 128 and the expected row count for the sample (unit test)
-- [ ] 7.3 Build the Tiled JSON (dense data, layers bottom to top, width/height from map size, 0 for empty cells); verify dimensions and data lengths (unit test)
-- [ ] 7.4 Emit layer `collider` bool properties and tile `interaction` string properties on all exported variants; verify against the sample's map.json properties (unit test)
-- [ ] 7.5 Pixel-equivalence test: render the baked map.json with the baked spritesheet and compare to the editor's rendering of the sample; verify zero differing pixels
-- [ ] 7.6 Regenerate `exports.spritesheet` and `exports.tiles` in Office.json on save and verify they match the bake output (unit test)
+- [x] 7.1 Implement tile variant rendering and pixel-hash dedupe with first-seen GID assignment; verify the sample bakes to <= 104 unique tiles (unit test)
+- [x] 7.2 Pack the spritesheet 8 columns wide with growing height and verify width 128 and the expected row count for the sample (unit test)
+- [x] 7.3 Build the Tiled JSON (dense data, layers bottom to top, width/height from map size, 0 for empty cells); verify dimensions and data lengths (unit test)
+- [x] 7.4 Emit layer `collider` bool properties and tile `interaction` string properties on all exported variants; verify against the sample's map.json properties (unit test)
+- [x] 7.5 Pixel-equivalence test: render the baked map.json with the baked spritesheet and compare to the editor's rendering of the sample; verify zero differing pixels
+- [x] 7.6 Regenerate `exports.spritesheet` and `exports.tiles` in Office.json on save and verify they match the bake output (unit test)
 - [ ] 7.7 "Export for Phaser" button that downloads `map.json` and `spritesheet.png`; verify a Phaser scene can load the downloaded pair (manual smoke test)
 
 ## 8. Wrap-up
 
-- [ ] 8.1 Add a README with usage (import, edit, save, export) and the Office.json extension fields; verify the steps work from a clean checkout
+- [x] 8.1 Add a README with usage (import, edit, save, export) and the Office.json extension fields; verify the steps work from a clean checkout

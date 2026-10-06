@@ -1,6 +1,7 @@
 import { Editor, type Brush } from './editor/editor';
 import { applyOrientOp, type OrientOp } from './editor/orientation';
-import { hasFileAccess, pickFile, saveText, type FileHandle } from './io/files';
+import { bakeExports, bakeFiles, bakeProject } from './model/bake';
+import { downloadBytes, downloadText, hasFileAccess, pickFile, saveText, type FileHandle } from './io/files';
 import { countTiles, getMapBounds, serializeOfficeJson, tryLoadProject } from './model/office';
 import type { Project } from './model/types';
 import { drawTile, MapView } from './render/mapView';
@@ -18,6 +19,7 @@ app.innerHTML = `
     <span class="group">
       <button id="save" type="button" title="Save Office.json (Ctrl+S)">Save</button>
       <button id="save-as" type="button" title="Save as... (Ctrl+Shift+S)">Save As</button>
+      <button id="export" type="button" title="Download map.json and spritesheet.png for Phaser">Export for Phaser</button>
     </span>
     <span class="group">
       <button id="tool-paint" type="button" title="Paint (B)">Paint</button>
@@ -176,6 +178,7 @@ function updateTitle(): void {
   document.title = `${editor?.dirty ? '* ' : ''}${fileName || 'Tilemap editor'}`;
   $<HTMLButtonElement>('save').disabled = !editor;
   $<HTMLButtonElement>('save-as').disabled = !editor;
+  $<HTMLButtonElement>('export').disabled = !editor;
 }
 
 function refresh(): void {
@@ -356,6 +359,8 @@ async function openFile(): Promise<void> {
 async function saveFile(saveAs: boolean): Promise<void> {
   if (!editor || !project) return;
   try {
+    // Keep the cached bake in the file in step with the layers.
+    project.exports = await bakeExports(bakeProject(project));
     const text = JSON.stringify(serializeOfficeJson(project));
     const saved = await saveText(text, fileHandle, fileName || 'Office.json', saveAs);
     if (!saved) return;
@@ -370,6 +375,19 @@ async function saveFile(saveAs: boolean): Promise<void> {
   }
 }
 
+async function exportForPhaser(): Promise<void> {
+  if (!project) return;
+  try {
+    const files = await bakeFiles(bakeProject(project));
+    downloadText(files.mapJson, 'map.json');
+    downloadBytes(files.spritesheetPng, 'spritesheet.png', 'image/png');
+    status.classList.remove('error');
+    status.textContent = 'Exported map.json and spritesheet.png';
+  } catch (err) {
+    reportError('Export failed', err);
+  }
+}
+
 function reportError(prefix: string, err: unknown): void {
   status.textContent = `${prefix}: ${err instanceof Error ? err.message : String(err)}`;
   status.classList.add('error');
@@ -378,6 +396,7 @@ function reportError(prefix: string, err: unknown): void {
 $('open-btn').addEventListener('click', () => void openFile());
 $('save').addEventListener('click', () => void saveFile(false));
 $('save-as').addEventListener('click', () => void saveFile(true));
+$('export').addEventListener('click', () => void exportForPhaser());
 $('open').addEventListener('change', async (e) => {
   const input = e.target as HTMLInputElement;
   const file = input.files?.[0];

@@ -1,3 +1,5 @@
+import type { Pixels } from './pngCodec';
+
 export type Rotation = 0 | 90 | 180 | 270;
 
 /** Fields we don't model are kept here and written back unchanged. */
@@ -45,6 +47,8 @@ export interface SpriteSheet {
   extra: Extra;
   /** Decoded image, set by the browser loader. */
   bitmap?: ImageBitmap;
+  /** Exact RGBA pixels, set by the loader; used by the Phaser bake. */
+  pixels?: Pixels;
 }
 
 export interface MapSize {
