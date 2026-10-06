@@ -401,3 +401,75 @@ button.icon.on {
   color: #e6e6ea;
   border-bottom-color: #8a8af0;
 }
+
+/* Pixel art editor page */
+.px-tools {
+  width: 150px;
+  flex: none;
+  background: #25252c;
+  border-right: 1px solid #3a3a44;
+  --px-check: repeating-conic-gradient(#c9c9d1 0 25%, #fff 0 50%) 0 0 / 8px 8px;
+}
+.px-tools h3 {
+  margin: 12px 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: #9a9aa8;
+}
+.px-tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.px-tool-list button {
+  text-align: left;
+}
+.px-color {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.px-color input[type='color'] {
+  width: 100%;
+  height: 32px;
+  padding: 0;
+  border: 1px solid #55556a;
+  background: none;
+}
+.px-alpha {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 4px;
+  align-items: center;
+  font-size: 12px;
+}
+.px-alpha input {
+  min-width: 0;
+}
+.px-swatch {
+  height: 20px;
+  border: 1px solid #55556a;
+}
+.px-recent {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+.px-recent-swatch {
+  height: 28px;
+  padding: 0;
+}
+#px-canvas {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+.status-row span + span {
+  margin-left: 16px;
+}
+.px-msg.error {
+  color: #ff8a8a;
+}
