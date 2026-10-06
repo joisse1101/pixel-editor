@@ -2,6 +2,7 @@ import { hasFileAccess, pickImage, saveBytes, type FileHandle } from '../io/file
 import { mountNav } from '../ui/nav';
 import { ColorState, toHex } from './colors';
 import { PixelDocument } from './document';
+import { parseGridLevels } from './gridLevels';
 import { decodeImageFile, encodeImageFile } from './pngFile';
 import { askSize } from './sizeDialog';
 import { ToolController, type Tool } from './tools';
@@ -54,6 +55,7 @@ app.insertAdjacentHTML(
     </span>
     <button id="resize" type="button" title="Resize canvas">Resize</button>
     <label><input id="grid" type="checkbox" checked /> Grid</label>
+    <label title="Overlay grid cell sizes in pixels, comma separated">Overlay <input id="grid-levels" type="text" value="16, 32" size="9" placeholder="16, 32" /></label>
     <button id="fit" type="button" title="Fit image in view">Fit</button>
     <span id="help" class="help" tabindex="0" role="button" aria-label="Controls help">
       ?
@@ -318,6 +320,13 @@ $<HTMLInputElement>('grid').addEventListener('change', (e) => {
   view.showGrid = (e.target as HTMLInputElement).checked;
   view.redraw();
 });
+const levelsInput = $<HTMLInputElement>('grid-levels');
+function applyGridLevels(): void {
+  view.gridLevels = parseGridLevels(levelsInput.value);
+  view.redraw();
+}
+levelsInput.addEventListener('input', applyGridLevels);
+applyGridLevels();
 $<HTMLInputElement>('filled').addEventListener('change', (e) => {
   tools.filled = (e.target as HTMLInputElement).checked;
 });

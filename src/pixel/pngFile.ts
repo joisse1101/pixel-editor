@@ -3,11 +3,15 @@ import { decodePng, encodePng, type Pixels } from '../model/pngCodec';
 /** Browser decode for PNGs the codec rejects (16-bit, interlaced) and other image types. */
 async function decodeWithCanvas(bytes: Uint8Array): Promise<Pixels> {
   const bitmap = await createImageBitmap(new Blob([bytes as BlobPart]));
-  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-  const ctx = canvas.getContext('2d')!;
-  ctx.drawImage(bitmap, 0, 0);
-  const { width, height, data } = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
-  return { width, height, data };
+  try {
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(bitmap, 0, 0);
+    const { width, height, data } = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+    return { width, height, data };
+  } finally {
+    bitmap.close();
+  }
 }
 
 /**
