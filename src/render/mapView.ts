@@ -21,14 +21,28 @@ export function drawTile(ctx: CanvasRenderingContext2D, project: Project, tile: 
   ctx.restore();
 }
 
+export interface PointerHandlers {
+  /** Cell is in absolute coordinates, or null when the pointer is outside the map rectangle. */
+  down(cell: [number, number] | null, e: PointerEvent): void;
+  move(cell: [number, number] | null, e: PointerEvent): void;
+  up(e: PointerEvent): void;
+}
+
 /** Canvas view of the map with zoom, pan and optional grid lines. */
 export class MapView {
   project: Project | null = null;
   showGrid = true;
+  /** Cell under the pointer, shown with a ghost of the brush tile when set. */
+  hoverCell: [number, number] | null = null;
+  ghost: PlacedTile | null = null;
+  selectedCell: [number, number] | null = null;
+  handlers: PointerHandlers | null = null;
+  spaceHeld = false;
   private zoom = 1;
   private panX = 0;
   private panY = 0;
-  private dragging = false;
+  private panning = false;
+  private tooling = false;
   private lastX = 0;
   private lastY = 0;
 
@@ -37,12 +51,20 @@ export class MapView {
     canvas.addEventListener('pointerdown', (e) => this.onPointerDown(e));
     canvas.addEventListener('pointermove', (e) => this.onPointerMove(e));
     canvas.addEventListener('pointerup', (e) => this.onPointerUp(e));
+    canvas.addEventListener('pointerleave', () => {
+      if (this.hoverCell) {
+        this.hoverCell = null;
+        this.draw();
+      }
+    });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     new ResizeObserver(() => this.resize()).observe(canvas);
   }
 
   setProject(project: Project | null): void {
     this.project = project;
+    this.hoverCell = null;
+    this.selectedCell = null;
     this.fit();
   }
 
@@ -63,6 +85,20 @@ export class MapView {
 
   zoomLabel(): string {
     return `${Math.round(this.zoom * 100)}%`;
+  }
+
+  /** Absolute cell under a client position, or null when outside the map rectangle. */
+  cellAt(clientX: number, clientY: number): [number, number] | null {
+    if (!this.project) return null;
+    const rect = this.canvas.getBoundingClientRect();
+    const b = getMapBounds(this.project);
+    const ts = this.project.tileSize;
+    const mx = (clientX - rect.left - this.panX) / this.zoom / ts;
+    const my = (clientY - rect.top - this.panY) / this.zoom / ts;
+    const cx = Math.floor(mx);
+    const cy = Math.floor(my);
+    if (cx < 0 || cy < 0 || cx >= b.width || cy >= b.height) return null;
+    return [cx + b.x, cy + b.y];
   }
 
   private resize(): void {
@@ -87,23 +123,42 @@ export class MapView {
   }
 
   private onPointerDown(e: PointerEvent): void {
-    this.dragging = true;
+    this.canvas.setPointerCapture(e.pointerId);
     this.lastX = e.clientX;
     this.lastY = e.clientY;
-    this.canvas.setPointerCapture(e.pointerId);
+    // Middle/right button, or Space + left button, pans; plain left button goes to the tool.
+    if (e.button === 1 || e.button === 2 || this.spaceHeld) {
+      this.panning = true;
+      return;
+    }
+    if (e.button === 0 && this.handlers) {
+      this.tooling = true;
+      this.handlers.down(this.cellAt(e.clientX, e.clientY), e);
+    }
   }
 
   private onPointerMove(e: PointerEvent): void {
-    if (!this.dragging) return;
-    this.panX += e.clientX - this.lastX;
-    this.panY += e.clientY - this.lastY;
-    this.lastX = e.clientX;
-    this.lastY = e.clientY;
+    if (this.panning) {
+      this.panX += e.clientX - this.lastX;
+      this.panY += e.clientY - this.lastY;
+      this.lastX = e.clientX;
+      this.lastY = e.clientY;
+      this.draw();
+      return;
+    }
+    const cell = this.cellAt(e.clientX, e.clientY);
+    this.hoverCell = cell;
+    this.handlers?.move(cell, e);
     this.draw();
+    this.canvas.dispatchEvent(new CustomEvent('hovercell', { detail: cell }));
   }
 
   private onPointerUp(e: PointerEvent): void {
-    this.dragging = false;
+    this.panning = false;
+    if (this.tooling) {
+      this.tooling = false;
+      this.handlers?.up(e);
+    }
     this.canvas.releasePointerCapture(e.pointerId);
   }
 
@@ -139,6 +194,13 @@ export class MapView {
         ctx.restore();
       }
     }
+    if (this.hoverCell && this.ghost) {
+      ctx.save();
+      ctx.globalAlpha = 0.65;
+      ctx.translate((this.hoverCell[0] - b.x) * ts, (this.hoverCell[1] - b.y) * ts);
+      drawTile(ctx, project, this.ghost);
+      ctx.restore();
+    }
     ctx.restore();
 
     if (this.showGrid) {
@@ -158,5 +220,13 @@ export class MapView {
     ctx.strokeStyle = 'rgba(255,255,255,0.6)';
     ctx.lineWidth = 2 / (dpr * this.zoom);
     ctx.strokeRect(0, 0, b.width * ts, b.height * ts);
+
+    const outline = (cell: [number, number], color: string) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2 / (dpr * this.zoom);
+      ctx.strokeRect((cell[0] - b.x) * ts, (cell[1] - b.y) * ts, ts, ts);
+    };
+    if (this.hoverCell) outline(this.hoverCell, 'rgba(255,255,255,0.9)');
+    if (this.selectedCell) outline(this.selectedCell, '#ffd54a');
   }
 }

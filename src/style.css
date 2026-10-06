@@ -37,10 +37,103 @@ button {
   color: #ff8a8a;
 }
 
-#map {
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+button.active {
+  background: #5b5bd6;
+  border-color: #8a8af0;
+}
+
+.group {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.status-row {
+  padding: 4px 12px;
+  background: #25252c;
+  font-size: 12px;
+}
+
+.main {
+  display: flex;
   flex: 1;
   min-height: 0;
-  width: 100%;
-  cursor: grab;
+}
+
+#map {
+  flex: 1;
+  min-width: 0;
+  cursor: crosshair;
+}
+
+.panel {
+  overflow: auto;
+  padding: 8px 10px;
+  background: #2b2b33;
+}
+
+.panel h3 {
+  margin: 8px 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #9a9aab;
+}
+
+.left {
+  width: 200px;
+  border-right: 1px solid #3a3a44;
+}
+
+.right {
+  width: 340px;
+  border-left: 1px solid #3a3a44;
+}
+
+#layers {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+#layers li {
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#layers li:hover {
+  background: #3a3a48;
+}
+
+#layers li.active {
+  background: #5b5bd6;
+}
+
+.brush {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#brush {
+  width: 48px;
+  height: 48px;
+  background: #1e1e24;
   image-rendering: pixelated;
+}
+
+#palette select {
+  width: 100%;
+  margin-bottom: 6px;
+}
+
+#palette canvas {
+  display: block;
+  image-rendering: pixelated;
+  cursor: pointer;
 }
