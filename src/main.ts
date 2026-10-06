@@ -2,7 +2,7 @@ import { Editor, type Brush } from './editor/editor';
 import { applyOrientOp, type OrientOp } from './editor/orientation';
 import { bakeExports, bakeFiles, bakeProject } from './model/bake';
 import { downloadBytes, downloadText, hasFileAccess, pickFile, saveText, type FileHandle } from './io/files';
-import { countTiles, getMapBounds, serializeOfficeJson, sheetLabel, sheetNameFromFile, tryLoadProject } from './model/office';
+import { countTiles, createBlankProject, getMapBounds, isMapEmpty, serializeOfficeJson, sheetLabel, sheetNameFromFile, tileSizeImpact, tryLoadProject } from './model/office';
 import type { Project } from './model/types';
 import { drawTile, MapView } from './render/mapView';
 import { decodeSheets } from './render/sheets';
@@ -14,6 +14,7 @@ type Tool = 'paint' | 'erase' | 'select';
 const app = document.getElementById('app')!;
 app.innerHTML = `
   <header class="toolbar">
+    <button id="new-btn" type="button" title="New canvas (Ctrl+N)">New</button>
     <button id="open-btn" type="button" title="Open Office.json (Ctrl+O)">Open</button>
     <input id="open" type="file" accept=".json,application/json" hidden />
     <span class="group">
@@ -36,6 +37,7 @@ app.innerHTML = `
       <button id="undo" type="button" title="Undo (Ctrl+Z)">Undo</button>
       <button id="redo" type="button" title="Redo (Ctrl+Y)">Redo</button>
     </span>
+    <button id="tile-size" type="button"></button>
     <label><input id="grid" type="checkbox" checked /> Grid</label>
     <button id="fit" type="button">Fit</button>
     <button id="preview" type="button" title="Preview exactly what Export for Phaser will contain">Preview</button>
@@ -43,7 +45,7 @@ app.innerHTML = `
     <span id="zoom"></span>
     <span id="cell"></span>
   </header>
-  <div class="status-row"><span id="status">No project loaded</span></div>
+  <div class="status-row"><span id="status"></span></div>
   <div class="main">
     <aside class="panel left">
       <h3>Layers</h3>
@@ -74,6 +76,7 @@ app.innerHTML = `
     </aside>
   </div>
   <dialog id="attr-dialog"></dialog>
+  <dialog id="new-dialog"></dialog>
 `;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -213,6 +216,17 @@ function refresh(): void {
   for (const t of ['paint', 'erase', 'select'] as Tool[]) $(`tool-${t}`).classList.toggle('active', tool === t);
   $<HTMLButtonElement>('undo').disabled = !editing || !editor?.canUndo();
   $<HTMLButtonElement>('redo').disabled = !editing || !editor?.canRedo();
+  const tileBtn = $<HTMLButtonElement>('tile-size');
+  tileBtn.textContent = `Tile ${project?.tileSize ?? '-'}px`;
+  const canResize = !!project && !view.previewing && isMapEmpty(project);
+  tileBtn.disabled = !canResize;
+  tileBtn.title = !project
+    ? 'Tile size'
+    : view.previewing
+      ? 'Leave preview to change the tile size'
+      : canResize
+        ? 'Change the tile size (only possible while the map is empty)'
+        : 'Erase all tiles to change the tile size';
   view.ghost = project && tool === 'paint' ? { ...brush, extra: {} } : null;
   $('brush-info').textContent = `${brush.flipX ? 'flipX ' : ''}${brush.flipY ? 'flipY ' : ''}rot ${brush.rotation}`;
   drawBrushPreview();
@@ -388,8 +402,13 @@ async function loadText(text: string, name: string, handle: FileHandle | null): 
   }
   status.classList.remove('error');
   await decodeSheets(result.project);
-  project = result.project;
-  editor = new Editor(project);
+  adoptProject(result.project, name, handle);
+}
+
+/** Installs a project as the current one and resets all per-project editor state. */
+function adoptProject(next: Project, name: string, handle: FileHandle | null): void {
+  project = next;
+  editor = new Editor(next);
   editor.onChange = () => {
     if (view.previewing) setPreview(true);
     view.draw();
@@ -398,11 +417,14 @@ async function loadText(text: string, name: string, handle: FileHandle | null): 
   fileName = name;
   fileHandle = handle;
   activeLayer = 0;
-  const first = project.sheets[0];
-  brush = { sheetId: first?.id ?? '', id: '0', flipX: false, flipY: false, rotation: 0 };
-  status.textContent = `${name} - ${project.layers.length} layers, ${countTiles(project)} tiles, ${project.sheets.length} sheets`;
-  palette.setProject(project);
-  view.setProject(project);
+  brush = { sheetId: next.sheets[0]?.id ?? '', id: '0', flipX: false, flipY: false, rotation: 0 };
+  status.classList.remove('error');
+  status.textContent = next.sheets.length
+    ? `${name} - ${next.layers.length} layers, ${countTiles(next)} tiles, ${next.sheets.length} sheets`
+    : `${name || next.name} - empty canvas. Import a PNG sprite sheet (right panel) to start painting.`;
+  palette.setProject(next);
+  view.setPreview(null);
+  view.setProject(next);
   setTool('paint');
   $('zoom').textContent = `Zoom ${view.zoomLabel()}`;
 }
@@ -459,6 +481,98 @@ function reportError(prefix: string, err: unknown): void {
   status.classList.add('error');
 }
 
+const DEFAULT_TILE_SIZE = 16;
+const newDialog = $<HTMLDialogElement>('new-dialog');
+
+function openNewDialog(): void {
+  if (newDialog.open) return;
+  const title = document.createElement('h3');
+  title.textContent = 'New canvas';
+  const sizeLabel = document.createElement('label');
+  sizeLabel.textContent = 'Tile size (px) ';
+  const size = document.createElement('input');
+  size.type = 'number';
+  size.min = '1';
+  size.step = '1';
+  size.value = String(DEFAULT_TILE_SIZE);
+  sizeLabel.append(size);
+  const nameLabel = document.createElement('label');
+  nameLabel.textContent = 'Name ';
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.value = 'Untitled';
+  nameLabel.append(nameInput);
+  const error = document.createElement('p');
+  error.className = 'hint error';
+  const create = document.createElement('button');
+  create.type = 'button';
+  create.textContent = 'Create';
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.textContent = 'Cancel';
+  const actions = document.createElement('div');
+  actions.className = 'group dialog-actions';
+  actions.append(create, cancel);
+
+  const submit = () => {
+    const n = Number(size.value);
+    if (size.value.trim() === '' || !Number.isInteger(n) || n <= 0) {
+      error.textContent = 'Tile size must be a whole number greater than 0.';
+      size.focus();
+      return;
+    }
+    if (editor?.dirty && !confirm('You have unsaved changes. Replace the current project with a new canvas?')) return;
+    newDialog.close();
+    adoptProject(createBlankProject(n, nameInput.value.trim() || 'Untitled'), '', null);
+  };
+  create.addEventListener('click', submit);
+  cancel.addEventListener('click', () => newDialog.close());
+  for (const input of [size, nameInput]) {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submit();
+      }
+    });
+  }
+  const form = document.createElement('div');
+  form.className = 'new-form';
+  form.append(sizeLabel, nameLabel);
+  newDialog.replaceChildren(title, form, error, actions);
+  newDialog.showModal();
+  size.select();
+}
+newDialog.addEventListener('close', () => newDialog.replaceChildren());
+
+function changeTileSize(): void {
+  if (!editor || !project || !isMapEmpty(project) || view.previewing) return;
+  const input = prompt('Tile size (px)', String(project.tileSize));
+  if (input === null) return;
+  const n = Number(input);
+  if (input.trim() === '' || !Number.isInteger(n) || n <= 0) {
+    reportError('Cannot change tile size', new Error('Tile size must be a whole number greater than 0.'));
+    return;
+  }
+  if (n === project.tileSize) return;
+  const { attributeCount, partialSheets } = tileSizeImpact(project, n);
+  const warnings: string[] = [];
+  if (attributeCount > 0) warnings.push(`${attributeCount} tile attribute(s) will be removed`);
+  if (partialSheets > 0) warnings.push(`${partialSheets} sheet(s) are not a multiple of ${n}px; partial edge tiles will be ignored`);
+  if (warnings.length && !confirm(`Change tile size to ${n}px?\n\n- ${warnings.join('\n- ')}\n\nThis cannot be undone.`)) return;
+  const result = editor.setTileSize(n);
+  if (!result.changed) {
+    reportError('Cannot change tile size', new Error(result.reason === 'not-empty' ? 'Erase all tiles first.' : 'Invalid tile size.'));
+    return;
+  }
+  brush = { ...brush, sheetId: project.sheets[0]?.id ?? '', id: '0' };
+  palette.setProject(project);
+  status.classList.remove('error');
+  status.textContent = `Tile size is now ${n}px`;
+  refresh();
+}
+
+$('new-btn').addEventListener('click', openNewDialog);
+$('tile-size').addEventListener('click', changeTileSize);
 $('open-btn').addEventListener('click', () => void openFile());
 $('save').addEventListener('click', () => void saveFile(false));
 $('save-as').addEventListener('click', () => void saveFile(true));
@@ -597,7 +711,10 @@ window.addEventListener('keydown', (e) => {
   }
   const mod = e.ctrlKey || e.metaKey;
   const k = e.key.toLowerCase();
-  if (mod && k === 's') {
+  if (mod && k === 'n') {
+    e.preventDefault();
+    openNewDialog();
+  } else if (mod && k === 's') {
     e.preventDefault();
     void saveFile(e.shiftKey);
   } else if (mod && k === 'o') {
@@ -623,4 +740,4 @@ window.addEventListener('keyup', (e) => {
   if (e.code === 'Space') view.spaceHeld = false;
 });
 
-refresh();
+adoptProject(createBlankProject(DEFAULT_TILE_SIZE, 'Untitled'), '', null);

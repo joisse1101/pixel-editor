@@ -238,3 +238,47 @@ export function tryLoadProject(
     throw e;
   }
 }
+
+/** A new empty project: one empty layer, no sheets. */
+export function createBlankProject(tileSize: number, name: string): Project {
+  return {
+    id: crypto.randomUUID(),
+    name,
+    description: '',
+    tileSize,
+    sheets: [],
+    layers: [
+      {
+        id: crypto.randomUUID(),
+        name: 'Layer 1',
+        description: '',
+        collider: false,
+        visible: true,
+        isAutoTile: false,
+        rules: [],
+        defaultTileVariants: [],
+        cells: new Map(),
+        extra: {},
+      },
+    ],
+    settings: {},
+    exports: {},
+    extra: {},
+  };
+}
+
+/** True when no layer has a placed tile. Counts cells, not bounds, which may also reflect settings. */
+export function isMapEmpty(p: Project): boolean {
+  return p.layers.every((l) => l.cells.size === 0);
+}
+
+/** What changing the tile size to `n` would affect: attributes that get cleared, sheets with partial edge tiles. */
+export function tileSizeImpact(p: Project, n: number): { attributeCount: number; partialSheets: number } {
+  let attributeCount = 0;
+  let partialSheets = 0;
+  for (const s of p.sheets) {
+    for (const list of Object.values(s.attributes)) attributeCount += list.length;
+    if (s.width % n !== 0 || s.height % n !== 0) partialSheets++;
+  }
+  return { attributeCount, partialSheets };
+}

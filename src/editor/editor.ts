@@ -1,4 +1,5 @@
 import { pngSizeFromDataUrl } from '../model/png';
+import { isMapEmpty } from '../model/office';
 import { cellKey, type Attribute, type Layer, type PlacedTile, type Project, type SpriteSheet } from '../model/types';
 import { applyOrientOp, type OrientOp, type Orientation } from './orientation';
 
@@ -196,6 +197,19 @@ export class Editor {
     sheets.splice(to, 0, ...sheets.splice(from, 1));
     this.structureChanged();
     return to;
+  }
+
+  /**
+   * Sets the tile size. Only allowed while the map has no tiles and for a positive integer.
+   * Clears every sheet's attributes, which are keyed to the old slicing. Not undoable.
+   */
+  setTileSize(n: number): { changed: true } | { changed: false; reason: 'invalid' | 'not-empty' } {
+    if (!Number.isInteger(n) || n <= 0) return { changed: false, reason: 'invalid' };
+    if (!isMapEmpty(this.project)) return { changed: false, reason: 'not-empty' };
+    for (const s of this.project.sheets) s.attributes = {};
+    this.project.tileSize = n;
+    this.structureChanged();
+    return { changed: true };
   }
 
   /** Number of placed tiles that use the sheet. */
