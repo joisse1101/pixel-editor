@@ -13,16 +13,16 @@
 
 ## 3. Rendering (tile-editing)
 
-- [ ] 3.1 Render visible layers on a canvas in correct stacking (last layer in file at bottom) with flip and rotation, and verify visually against `spritesheet.png` + `map.json` for the sample
-- [ ] 3.2 Add zoom, pan and optional grid lines; verify wheel zoom and drag pan behaviour manually
+- [x] 3.1 Render visible layers on a canvas in correct stacking (last layer in file at bottom) with flip and rotation, and verify visually against `spritesheet.png` + `map.json` for the sample
+- [x] 3.2 Add zoom, pan and optional grid lines; verify wheel zoom and drag pan behaviour manually
 - [x] 3.3 Implement the transform helper (flip then rotate on 16x16 pixel data) and verify all 8 orientations against known pixel patterns (unit test)
 
 ## 4. Editing tools (tile-editing)
 
 - [ ] 4.1 Implement paint (click and drag) enforcing one tile per cell per layer and verify replace behaviour (unit test + manual)
-- [ ] 4.2 Implement eraser on the active layer only and verify tiles on other layers remain (unit test)
+- [x] 4.2 Implement eraser on the active layer only and verify tiles on other layers remain (unit test)
 - [ ] 4.3 Implement flip H/V and rotate controls for the brush and for placed tiles, with keyboard shortcuts; verify stored `scaleX/scaleY/rotation` values (unit test)
-- [ ] 4.4 Implement undo/redo with per-stroke diffs and verify a multi-cell stroke reverts in one step (unit test)
+- [x] 4.4 Implement undo/redo with per-stroke diffs and verify a multi-cell stroke reverts in one step (unit test)
 - [ ] 4.5 Implement map resize (grow/shrink) with confirmation when tiles would be dropped; verify tiles outside the bounds are removed only after confirmation and `mapSize` is saved
 
 ## 5. Layers (layer-management)
