@@ -36,7 +36,7 @@ function renderMap(map: TiledMap, sheet: Pixels): Uint8ClampedArray {
 
 /** Draws the project straight from the source sheets, like the editor canvas does. */
 function renderEditor(project: Project): Uint8ClampedArray {
-  const b = getMapBounds(project);
+  const b = getMapBounds(project)!;
   const out = new Uint8ClampedArray(b.width * b.height * TS * TS * 4);
   for (let i = project.layers.length - 1; i >= 0; i--) {
     for (let y = 0; y < b.height; y++) {
@@ -59,12 +59,10 @@ function diffCount(a: Uint8ClampedArray, b: Uint8ClampedArray, tolerance = 0): n
 }
 
 /** A project with one empty layer holding the given tiles on a fresh map rectangle. */
-async function tinyProject(width: number, place: (project: Project) => void): Promise<Project> {
+async function tinyProject(_width: number, place: (project: Project) => void): Promise<Project> {
   const project = await loadSampleProject();
   for (const l of project.layers) l.cells.clear();
   place(project);
-  project.mapOrigin = { x: 0, y: 0 };
-  project.mapSize = { width, height: 1 };
   return project;
 }
 
@@ -123,13 +121,19 @@ describe('bake', () => {
     expect(m.layers.map((l) => l.data.filter((g) => g !== 0).length)).toEqual(bottomUp.map((l) => l.cells.size));
   });
 
-  it('exports the resized map size', async () => {
+  it('exports the tight bounding box of two distant tiles', async () => {
     const project = await loadSampleProject();
-    project.mapSize = { width: 50, height: 30 };
+    for (const l of project.layers) l.cells.clear();
+    const tile = { id: '0', sheetId: project.sheets[0].id, flipX: false, flipY: false, rotation: 0 as const, extra: {} };
+    project.layers[0].cells.set('-5,3', tile);
+    project.layers[1].cells.set('10,-2', tile);
     const m = bakeProject(project).map;
-    expect(m.width).toBe(50);
-    expect(m.height).toBe(30);
-    expect(m.layers.every((l) => l.data.length === 1500)).toBe(true);
+    expect(m.width).toBe(16);
+    expect(m.height).toBe(6);
+    expect(m.layers.every((l) => l.data.length === 96)).toBe(true);
+    const bottomUp = [...project.layers].reverse();
+    expect(m.layers[bottomUp.indexOf(project.layers[0])].data.findIndex((g) => g)).toBe(5 * 16 + 0);
+    expect(m.layers[bottomUp.indexOf(project.layers[1])].data.findIndex((g) => g)).toBe(15);
   });
 
   it('writes collider layer properties and tile attributes matching the sample map.json', async () => {

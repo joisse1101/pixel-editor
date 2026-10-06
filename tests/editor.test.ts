@@ -133,40 +133,6 @@ describe('orientation ops on placed tiles', () => {
   });
 });
 
-describe('map resize', () => {
-  it('grows without touching tiles and saves origin and size', () => {
-    const e = new Editor(sample());
-    const before = countTiles(e.project);
-    expect(e.tilesOutside(50, 30)).toBe(0);
-    expect(e.resizeMap(50, 30)).toBe(0);
-    expect(countTiles(e.project)).toBe(before);
-    const saved: any = serializeOfficeJson(e.project);
-    expect(saved.settings.mapSize).toEqual({ width: 50, height: 30 });
-    expect(saved.settings.mapOrigin).toEqual({ x: 21, y: 4 });
-    expect(e.dirty).toBe(true);
-  });
-
-  it('shrinking reports and removes only tiles outside the new bounds', () => {
-    const e = new Editor(sample());
-    const before = countTiles(e.project);
-    const outside = e.tilesOutside(40, 20);
-    expect(outside).toBeGreaterThan(0);
-    expect(countTiles(e.project)).toBe(before); // counting changes nothing
-    expect(e.resizeMap(40, 20)).toBe(outside);
-    expect(countTiles(e.project)).toBe(before - outside);
-    for (const l of e.project.layers) {
-      for (const key of l.cells.keys()) expect(Number(key.split(',')[1])).toBeLessThan(4 + 20);
-    }
-    expect(e.canUndo()).toBe(false);
-  });
-
-  it('rejects invalid sizes', () => {
-    const e = new Editor(sample());
-    expect(() => e.resizeMap(0, 5)).toThrow();
-    expect(() => e.resizeMap(2.5, 5)).toThrow();
-  });
-});
-
 describe('layer management', () => {
   const names = (e: Editor) => e.project.layers.map((l) => l.name);
 

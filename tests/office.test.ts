@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countTiles, getMapBounds, getMapSize, parseOfficeJson, serializeOfficeJson, tryLoadProject } from '../src/model/office';
+import { countTiles, getMapBounds, parseOfficeJson, serializeOfficeJson, tryLoadProject } from '../src/model/office';
 import { loadOfficeJson } from './fixtures';
 
 describe('Office.json model', () => {
@@ -36,40 +36,56 @@ describe('Office.json model', () => {
     expect(b).toEqual(a);
   });
 
-  it('writes rotation and mapSize only when set, and reads them back', () => {
+  it('writes rotation only when set, and reads it back', () => {
     const p = parseOfficeJson(loadOfficeJson());
     const tile = [...p.layers[0].cells.values()][0];
     tile.rotation = 90;
-    p.mapSize = { width: 50, height: 30 };
     const out: any = JSON.parse(JSON.stringify(serializeOfficeJson(p)));
     expect(out.layers[0].tiles[0].rotation).toBe(90);
     expect(out.layers[0].tiles[1].rotation).toBeUndefined();
-    expect(out.settings.mapSize).toEqual({ width: 50, height: 30 });
     const again = parseOfficeJson(out);
     expect([...again.layers[0].cells.values()][0].rotation).toBe(90);
-    expect(getMapSize(again)).toEqual({ width: 50, height: 30 });
   });
 
-  it('derives origin (21,4) and size 40x26 from tile bounds when settings are absent', () => {
+  it('derives origin (21,4) and size 40x26 from the tile bounding box', () => {
     const p = parseOfficeJson(loadOfficeJson());
     expect(getMapBounds(p)).toEqual({ x: 21, y: 4, width: 40, height: 26 });
-    expect(getMapSize(p)).toEqual({ width: 40, height: 26 });
   });
 
-  it('does not add mapSize or mapOrigin on an unedited save', () => {
-    const out: any = serializeOfficeJson(parseOfficeJson(loadOfficeJson()));
+  it('bounds two distant tiles on different layers as 16x6', () => {
+    const p = parseOfficeJson(loadOfficeJson());
+    for (const l of p.layers) l.cells.clear();
+    const tile = { id: '0', sheetId: p.sheets[0].id, flipX: false, flipY: false, rotation: 0 as const, extra: {} };
+    p.layers[0].cells.set('-5,3', tile);
+    p.layers[1].cells.set('10,-2', tile);
+    expect(getMapBounds(p)).toEqual({ x: -5, y: -2, width: 16, height: 6 });
+  });
+
+  it('includes hidden layers in the bounds', () => {
+    const p = parseOfficeJson(loadOfficeJson());
+    const before = getMapBounds(p)!;
+    const tile = [...p.layers[0].cells.values()][0];
+    p.layers[1].visible = false;
+    p.layers[1].cells.set('100,100', tile);
+    const b = getMapBounds(p)!;
+    expect(b.x + b.width - 1).toBe(100);
+    expect(b.x).toBe(before.x);
+  });
+
+  it('returns null for an empty project', () => {
+    const p = parseOfficeJson(loadOfficeJson());
+    for (const l of p.layers) l.cells.clear();
+    expect(getMapBounds(p)).toBeNull();
+  });
+
+  it('ignores legacy mapSize and mapOrigin on load and does not write them back', () => {
+    const raw: any = loadOfficeJson();
+    raw.settings = { ...raw.settings, mapSize: { width: 50, height: 30 }, mapOrigin: { x: 0, y: 0 } };
+    const p = parseOfficeJson(raw);
+    expect(countTiles(p)).toBe(countTiles(parseOfficeJson(loadOfficeJson())));
+    const out: any = serializeOfficeJson(p);
     expect(out.settings.mapSize).toBeUndefined();
     expect(out.settings.mapOrigin).toBeUndefined();
-  });
-
-  it('round-trips an explicit mapOrigin and supports negative cells', () => {
-    const p = parseOfficeJson(loadOfficeJson());
-    p.mapOrigin = { x: -3, y: 2 };
-    p.layers[0].cells.set('-3,2', [...p.layers[0].cells.values()][0]);
-    const out: any = JSON.parse(JSON.stringify(serializeOfficeJson(p)));
-    expect(out.settings.mapOrigin).toEqual({ x: -3, y: 2 });
-    const again = parseOfficeJson(out);
-    expect(again.layers[0].cells.has('-3,2')).toBe(true);
-    expect(getMapBounds(again)).toMatchObject({ x: -3, y: 2 });
+    expect(getMapBounds(p)).toEqual({ x: 21, y: 4, width: 40, height: 26 });
   });
 });

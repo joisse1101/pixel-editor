@@ -110,7 +110,7 @@ export function renderTile(project: Project, tile: PlacedTile): Uint8ClampedArra
  */
 export function bakeProject(project: Project): Bake {
   const ts = project.tileSize;
-  const b = getMapBounds(project);
+  const b = getMapBounds(project) ?? { x: 0, y: 0, width: 0, height: 0 };
   const tiles: Uint8ClampedArray[] = [];
   const hashes: string[] = [];
   const attrs: TiledProperty[][] = [];

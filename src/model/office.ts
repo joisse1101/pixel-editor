@@ -5,7 +5,6 @@ import {
   type Attribute,
   type Extra,
   type Layer,
-  type MapOrigin,
   type PlacedTile,
   type Project,
   type Rotation,
@@ -114,25 +113,9 @@ export function parseOfficeJson(input: string | unknown): Project {
   });
 
   const settings: Extra = isObject(raw.settings) ? { ...raw.settings } : {};
-  let mapSize: Project['mapSize'];
-  if (settings.mapSize !== undefined) {
-    const ms = settings.mapSize as any;
-    if (!isObject(ms) || !Number.isInteger(ms.width) || !Number.isInteger(ms.height) || ms.width < 1 || ms.height < 1) {
-      throw new ProjectParseError('"settings.mapSize" must have positive integer width and height');
-    }
-    mapSize = { width: ms.width, height: ms.height };
-    delete settings.mapSize;
-  }
-
-  let mapOrigin: MapOrigin | undefined;
-  if (settings.mapOrigin !== undefined) {
-    const mo = settings.mapOrigin as any;
-    if (!isObject(mo) || !Number.isInteger(mo.x) || !Number.isInteger(mo.y)) {
-      throw new ProjectParseError('"settings.mapOrigin" must have integer x and y');
-    }
-    mapOrigin = { x: mo.x, y: mo.y };
-    delete settings.mapOrigin;
-  }
+  // Legacy map size/origin are derived from the tiles now; drop them so they are not written back.
+  delete settings.mapSize;
+  delete settings.mapOrigin;
 
   return {
     id: raw.id,
@@ -142,14 +125,12 @@ export function parseOfficeJson(input: string | unknown): Project {
     sheets,
     layers,
     settings,
-    mapSize,
-    mapOrigin,
     exports: raw.exports,
     extra: omit(raw, ['id', 'name', 'description', 'tileSize', 'spriteSheets', 'layers', 'settings', 'exports']),
   };
 }
 
-/** Builds the Office.json object. Rotation and mapSize are written only when set. */
+/** Builds the Office.json object. Rotation is written only when set. */
 export function serializeOfficeJson(p: Project): Record<string, unknown> {
   const spriteSheets: Record<string, unknown> = {};
   for (const s of p.sheets) {
@@ -183,9 +164,6 @@ export function serializeOfficeJson(p: Project): Record<string, unknown> {
       ...l.extra,
     };
   });
-  const settings: Extra = { ...p.settings };
-  if (p.mapSize) settings.mapSize = { width: p.mapSize.width, height: p.mapSize.height };
-  if (p.mapOrigin) settings.mapOrigin = { x: p.mapOrigin.x, y: p.mapOrigin.y };
   return {
     id: p.id,
     name: p.name,
@@ -193,17 +171,24 @@ export function serializeOfficeJson(p: Project): Record<string, unknown> {
     tileSize: p.tileSize,
     spriteSheets,
     layers,
-    settings,
+    settings: p.settings,
     exports: p.exports,
     ...p.extra,
   };
 }
 
+export interface MapBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /**
- * Map rectangle in absolute cells. Sprite Fusion positions are not zero-based, so without
- * explicit settings the origin is the minimum tile cell and the size spans to the maximum.
+ * Smallest rectangle in absolute cells containing every filled cell on any layer (hidden layers
+ * included), or null when nothing is filled. This is the exported extent.
  */
-export function getMapBounds(p: Project): { x: number; y: number; width: number; height: number } {
+export function getMapBounds(p: Project): MapBounds | null {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -217,20 +202,8 @@ export function getMapBounds(p: Project): { x: number; y: number; width: number;
       maxY = Math.max(maxY, y);
     }
   }
-  const empty = minX === Infinity;
-  const x = p.mapOrigin?.x ?? (empty ? 0 : minX);
-  const y = p.mapOrigin?.y ?? (empty ? 0 : minY);
-  return {
-    x,
-    y,
-    width: p.mapSize?.width ?? (empty ? 0 : maxX - x + 1),
-    height: p.mapSize?.height ?? (empty ? 0 : maxY - y + 1),
-  };
-}
-
-export function getMapSize(p: Project): { width: number; height: number } {
-  const { width, height } = getMapBounds(p);
-  return { width, height };
+  if (minX === Infinity) return null;
+  return { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 };
 }
 
 export function countTiles(p: Project): number {

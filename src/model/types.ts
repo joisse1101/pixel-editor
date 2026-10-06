@@ -51,16 +51,6 @@ export interface SpriteSheet {
   pixels?: Pixels;
 }
 
-export interface MapSize {
-  width: number;
-  height: number;
-}
-
-export interface MapOrigin {
-  x: number;
-  y: number;
-}
-
 export interface Project {
   id: string;
   name: string;
@@ -70,10 +60,6 @@ export interface Project {
   /** Same order as the file: first layer is drawn on top, last at the bottom. */
   layers: Layer[];
   settings: Extra;
-  /** Explicit map size (settings.mapSize). Undefined means derive from tile bounds. */
-  mapSize?: MapSize;
-  /** Explicit map origin in absolute cells (settings.mapOrigin). Undefined means the minimum tile cell. */
-  mapOrigin?: MapOrigin;
   /** Cached Sprite Fusion bake; regenerated on save. */
   exports: unknown;
   extra: Extra;

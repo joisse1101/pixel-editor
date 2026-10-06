@@ -38,7 +38,8 @@ app.innerHTML = `
     </span>
     <label><input id="grid" type="checkbox" checked /> Grid</label>
     <button id="fit" type="button">Fit</button>
-    <button id="map-size" type="button" title="Change map width and height">Map size</button>
+    <button id="preview" type="button" title="Preview exactly what Export for Phaser will contain">Preview</button>
+    <span id="size"></span>
     <span id="zoom"></span>
     <span id="cell"></span>
   </header>
@@ -178,14 +179,39 @@ function updateTitle(): void {
   document.title = `${editor?.dirty ? '* ' : ''}${fileName || 'Tilemap editor'}`;
   $<HTMLButtonElement>('save').disabled = !editor;
   $<HTMLButtonElement>('save-as').disabled = !editor;
-  $<HTMLButtonElement>('export').disabled = !editor;
+  const b = project ? getMapBounds(project) : null;
+  $<HTMLButtonElement>('export').disabled = !editor || !b;
+  $<HTMLButtonElement>('preview').disabled = !editor || !b;
+  $<HTMLButtonElement>('preview').classList.toggle('active', view.previewing);
+  $('size').textContent = b ? `Export ${b.width}x${b.height}` : project ? 'Export: empty' : '';
+}
+
+/** Switches the canvas to the baked export preview, or back to editing. Leaves preview when nothing is filled. */
+function setPreview(on: boolean): void {
+  if (!project) return;
+  if (on && getMapBounds(project)) {
+    try {
+      view.setPreview(bakeProject(project));
+    } catch (err) {
+      view.setPreview(null);
+      reportError('Preview failed', err);
+    }
+  } else {
+    view.setPreview(null);
+  }
+  refresh();
 }
 
 function refresh(): void {
+  if (view.previewing && project && !getMapBounds(project)) view.setPreview(null);
   updateTitle();
+  const editing = !view.previewing;
+  for (const id of ['tool-paint', 'tool-erase', 'tool-select', 'flip-h', 'flip-v', 'rot-cw', 'rot-ccw']) {
+    $<HTMLButtonElement>(id).disabled = !editing;
+  }
   for (const t of ['paint', 'erase', 'select'] as Tool[]) $(`tool-${t}`).classList.toggle('active', tool === t);
-  $<HTMLButtonElement>('undo').disabled = !editor?.canUndo();
-  $<HTMLButtonElement>('redo').disabled = !editor?.canRedo();
+  $<HTMLButtonElement>('undo').disabled = !editing || !editor?.canUndo();
+  $<HTMLButtonElement>('redo').disabled = !editing || !editor?.canRedo();
   view.ghost = project && tool === 'paint' ? { ...brush, extra: {} } : null;
   $('brush-info').textContent = `${brush.flipX ? 'flipX ' : ''}${brush.flipY ? 'flipY ' : ''}rot ${brush.rotation}`;
   drawBrushPreview();
@@ -305,10 +331,10 @@ function moveActiveLayer(delta: number): void {
 }
 
 function undo(): void {
-  if (editor?.undo()) refresh();
+  if (!view.previewing && editor?.undo()) refresh();
 }
 function redo(): void {
-  if (editor?.redo()) refresh();
+  if (!view.previewing && editor?.redo()) refresh();
 }
 
 async function loadText(text: string, name: string, handle: FileHandle | null): Promise<void> {
@@ -324,6 +350,7 @@ async function loadText(text: string, name: string, handle: FileHandle | null): 
   project = result.project;
   editor = new Editor(project);
   editor.onChange = () => {
+    if (view.previewing) setPreview(true);
     view.draw();
     updateTitle();
   };
@@ -332,8 +359,7 @@ async function loadText(text: string, name: string, handle: FileHandle | null): 
   activeLayer = 0;
   const first = project.sheets[0];
   brush = { sheetId: first?.id ?? '', id: '0', flipX: false, flipY: false, rotation: 0 };
-  const b = getMapBounds(project);
-  status.textContent = `${name} - ${project.layers.length} layers, ${countTiles(project)} tiles, ${project.sheets.length} sheets, map ${b.width}x${b.height}`;
+  status.textContent = `${name} - ${project.layers.length} layers, ${countTiles(project)} tiles, ${project.sheets.length} sheets`;
   palette.setProject(project);
   palette.setSelected({ sheetId: brush.sheetId, id: brush.id });
   view.setProject(project);
@@ -376,7 +402,7 @@ async function saveFile(saveAs: boolean): Promise<void> {
 }
 
 async function exportForPhaser(): Promise<void> {
-  if (!project) return;
+  if (!project || !getMapBounds(project)) return;
   try {
     const files = await bakeFiles(bakeProject(project));
     downloadText(files.mapJson, 'map.json');
@@ -397,6 +423,7 @@ $('open-btn').addEventListener('click', () => void openFile());
 $('save').addEventListener('click', () => void saveFile(false));
 $('save-as').addEventListener('click', () => void saveFile(true));
 $('export').addEventListener('click', () => void exportForPhaser());
+$('preview').addEventListener('click', () => setPreview(!view.previewing));
 $('open').addEventListener('change', async (e) => {
   const input = e.target as HTMLInputElement;
   const file = input.files?.[0];
@@ -419,8 +446,7 @@ $('fit').addEventListener('click', () => {
 canvas.addEventListener('viewchange', () => ($('zoom').textContent = `Zoom ${view.zoomLabel()}`));
 canvas.addEventListener('hovercell', (e) => {
   const c = (e as CustomEvent<[number, number] | null>).detail;
-  const b = project ? getMapBounds(project) : null;
-  $('cell').textContent = c && b ? `Cell ${c[0] - b.x},${c[1] - b.y}` : '';
+  $('cell').textContent = c ? `Cell ${c[0]},${c[1]}` : '';
 });
 
 $('tool-paint').addEventListener('click', () => setTool('paint'));
@@ -450,26 +476,6 @@ $('layer-delete').addEventListener('click', () => {
   if (layer.cells.size > 0 && !confirm(`Delete layer "${layer.name}" and its ${layer.cells.size} tiles? This cannot be undone.`)) return;
   editor.deleteLayer(activeLayer);
   activeLayer = Math.min(activeLayer, project.layers.length - 1);
-  refresh();
-});
-$('map-size').addEventListener('click', () => {
-  if (!editor || !project) return;
-  const b = getMapBounds(project);
-  const answer = prompt('Map size in tiles (width x height)', `${b.width}x${b.height}`);
-  if (!answer) return;
-  const m = /^\s*(\d+)\s*[x,* ]\s*(\d+)\s*$/i.exec(answer);
-  const w = m ? Number(m[1]) : 0;
-  const h = m ? Number(m[2]) : 0;
-  if (w < 1 || h < 1) {
-    reportError('Resize failed', new Error('Enter a size like 50x30'));
-    return;
-  }
-  const drop = editor.tilesOutside(w, h);
-  if (drop > 0 && !confirm(`Shrinking to ${w}x${h} removes ${drop} tiles outside the new bounds. This cannot be undone. Continue?`)) return;
-  editor.resizeMap(w, h);
-  status.classList.remove('error');
-  status.textContent = `Map resized to ${w}x${h}${drop ? `, ${drop} tiles removed` : ''}`;
-  view.fit();
   refresh();
 });
 $('sheet-import').addEventListener('click', () => $('sheet-file').click());
@@ -545,7 +551,7 @@ window.addEventListener('keydown', (e) => {
   } else if (mod && k === 'y') {
     e.preventDefault();
     redo();
-  } else if (!mod && !e.altKey) {
+  } else if (!mod && !e.altKey && !view.previewing) {
     if (k === 'b') setTool('paint');
     else if (k === 'e') setTool('erase');
     else if (k === 'v') setTool('select');
