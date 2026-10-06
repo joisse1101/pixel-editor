@@ -14,8 +14,8 @@
 
 ## 3. History and document model
 
-- [ ] 3.1 Add `src/pixel/history.ts` with sparse-diff steps, whole-image snapshot steps, `beginStroke`/`endStroke`, undo/redo, redo discard on new edit and a saved-position marker; verify tests for undo/redo of strokes and resizes, branching, and "dirty" clearing when undoing back to the saved state
-- [ ] 3.2 Add `src/pixel/document.ts` tying `Pixels` + history + selection + clipboard together with edit methods per tool (pencil, erase, fill, shape commit, move/copy, paste, delete, flip, rotate, resize); verify document tests that each edit is exactly one undo step and a no-op fill adds none
+- [x] 3.1 Add `src/pixel/history.ts` with sparse-diff steps, whole-image snapshot steps, `beginStroke`/`endStroke`, undo/redo, redo discard on new edit and a saved-position marker; verify tests for undo/redo of strokes and resizes, branching, and "dirty" clearing when undoing back to the saved state
+- [x] 3.2 Add `src/pixel/document.ts` tying `Pixels` + history + selection + clipboard together with edit methods per tool (pencil, erase, fill, shape commit, move/copy, paste, delete, flip, rotate, resize); verify document tests that each edit is exactly one undo step and a no-op fill adds none
 
 ## 4. File I/O
 
