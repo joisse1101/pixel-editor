@@ -1,15 +1,4 @@
-## Purpose
-
-Defines how the pixel art editor creates, loads, saves and resizes an image. It works on plain PNG files only and is not linked to the map project file.
-
-## Requirements
-
-### Requirement: Blank canvas on startup
-The system SHALL open the pixel editor with a blank, fully transparent image of 32x32 pixels.
-
-#### Scenario: First load
-- **WHEN** the pixel editor page opens
-- **THEN** a transparent 32x32 canvas is shown and ready to draw on
+## MODIFIED Requirements
 
 ### Requirement: New image
 The system SHALL let the user start a new transparent image of a chosen width and height, each a whole number from 1 to 4096. The new document SHALL have a single transparent layer. If the current document has unsaved changes, the system SHALL ask for confirmation first.

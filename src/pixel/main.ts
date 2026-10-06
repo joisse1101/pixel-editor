@@ -1,8 +1,11 @@
-import { hasFileAccess, pickImage, saveBytes, type FileHandle } from '../io/files';
+import { hasFileAccess, pickImages, saveBytes, type FileHandle } from '../io/files';
 import { mountNav } from '../ui/nav';
 import { ColorState, toHex } from './colors';
 import { PixelDocument } from './document';
 import { parseGridLevels } from './gridLevels';
+import { LayerPanel } from './layerPanel';
+import type { Pixels } from '../model/pngCodec';
+import { flatten } from './ops';
 import { decodeImageFile, encodeImageFile } from './pngFile';
 import { askSize } from './sizeDialog';
 import { ToolController, type Tool } from './tools';
@@ -38,7 +41,7 @@ app.insertAdjacentHTML(
   <header class="toolbar">
     <button id="new-btn" type="button" title="New image (Ctrl+N)">New</button>
     <button id="open-btn" type="button" title="Open PNG (Ctrl+O)">Open</button>
-    <input id="open-file" type="file" accept="image/png,image/*" hidden />
+    <input id="open-file" type="file" accept="image/png,image/*" multiple hidden />
     <span class="group">
       <button id="save" type="button" title="Save PNG (Ctrl+S)">Save</button>
       <button id="save-as" type="button" title="Save as... (Ctrl+Shift+S)">Save As</button>
@@ -81,6 +84,17 @@ app.insertAdjacentHTML(
           <dt><kbd>Del</kbd></dt><dd>Delete selection</dd>
           <dt><kbd>Esc</kbd></dt><dd>Clear selection</dd>
         </dl>
+        <h4>Layers</h4>
+        <dl>
+          <dt><kbd>Open</kbd></dt><dd>Pick several PNGs to add each as a layer</dd>
+          <dt><kbd>Eye</kbd></dt><dd>Show / hide a layer</dd>
+          <dt><kbd>Double-click name</kbd></dt><dd>Rename a layer</dd>
+          <dt><kbd>Ctrl + C, pick a layer, Ctrl + V</kbd></dt><dd>Copy pixels to another layer</dd>
+        </dl>
+        <h4>Canvas size</h4>
+        <dl>
+          <dt><kbd>Drag a canvas edge or corner</kbd></dt><dd>Resize the canvas (Esc cancels)</dd>
+        </dl>
         <h4>View</h4>
         <dl>
           <dt><kbd>Wheel</kbd></dt><dd>Zoom</dd>
@@ -110,9 +124,11 @@ app.insertAdjacentHTML(
       <div id="recent" class="px-recent"></div>
     </aside>
     <canvas id="px-canvas"></canvas>
+    <aside id="px-layers" class="px-layers panel"></aside>
   </div>
   <div class="status-row">
     <span id="px-name">untitled.png</span><span id="px-dirty"></span>
+    <span id="px-layer"></span>
     <span id="px-size"></span>
     <span id="px-zoom"></span>
     <span id="px-hover"></span>
@@ -128,6 +144,8 @@ const view = new PixelView($<HTMLCanvasElement>('px-canvas'), doc);
 const tools = new ToolController(doc, view, colors, () => refreshColor());
 view.handlers = tools;
 let handle: FileHandle | null = null;
+/** The handle is the file the document was opened from (not a place the user saved to). */
+let handleIsSource = false;
 let fileName = 'untitled.png';
 
 // ---- Status ----
@@ -141,6 +159,7 @@ function message(text: string, error = false): void {
 function refreshStatus(): void {
   $('px-name').textContent = fileName;
   $('px-dirty').textContent = doc.isDirty ? ' *' : '';
+  $('px-layer').textContent = `Layer: ${doc.activeLayer.name}`;
   $('px-size').textContent = `${doc.width} × ${doc.height}`;
   $('px-zoom').textContent = `${Math.round(view.viewport.scale * 100)}%`;
   $<HTMLButtonElement>('undo').disabled = !doc.history.canUndo;
@@ -158,11 +177,13 @@ function refreshHover(): void {
   $('px-hover').textContent = `${p.x}, ${p.y}  rgba(${d[i]}, ${d[i + 1]}, ${d[i + 2]}, ${d[i + 3]})`;
 }
 
+const layerPanel = new LayerPanel($('px-layers'), doc);
 view.onHover = refreshHover;
 doc.onChange = () => {
   view.invalidate();
   refreshStatus();
   refreshHover();
+  layerPanel.refresh();
 };
 
 // ---- Tools ----
@@ -225,26 +246,53 @@ function confirmDiscard(): boolean {
   return !doc.isDirty || window.confirm('The image has unsaved changes. Discard them?');
 }
 
-async function loadBytes(bytes: Uint8Array, name: string, newHandle: FileHandle | null): Promise<void> {
-  try {
-    doc.load(await decodeImageFile(bytes));
-  } catch (e) {
-    message(`Could not open ${name}: ${(e as Error).message}`, true);
-    return;
+const layerName = (file: string): string => file.replace(/\.[^.]+$/, '') || file;
+
+interface PickedImage {
+  bytes: Uint8Array;
+  name: string;
+  handle: FileHandle | null;
+}
+
+/**
+ * Adds each image as a layer (the canvas grows to fit). Files that cannot be read are skipped and
+ * named in the message. Opening into a blank document makes the file the document, so Save can
+ * overwrite it when it is the only one.
+ */
+async function importImages(files: PickedImage[]): Promise<void> {
+  const images: { name: string; px: Pixels }[] = [];
+  const errors: string[] = [];
+  for (const f of files) {
+    try {
+      images.push({ name: layerName(f.name), px: await decodeImageFile(f.bytes) });
+    } catch (e) {
+      errors.push(`Could not open ${f.name}: ${(e as Error).message}`);
+    }
   }
-  handle = newHandle;
-  fileName = name;
-  view.fit();
+  if (images.length) {
+    const blank = doc.isBlank;
+    try {
+      const grown = doc.addLayers(images);
+      if (blank) {
+        const single = files.length === 1 && images.length === 1;
+        handle = single ? files[0].handle : null;
+        handleIsSource = single && handle !== null;
+        fileName = single ? files[0].name : 'untitled.png';
+      }
+      if (grown) view.fit();
+    } catch (e) {
+      errors.push(`Could not add the images: ${(e as Error).message}`);
+    }
+  }
   refreshStatus();
-  message('');
+  message(errors.join('; '), errors.length > 0);
 }
 
 async function openImage(): Promise<void> {
-  if (!confirmDiscard()) return;
   if (hasFileAccess()) {
     try {
-      const picked = await pickImage();
-      if (picked) await loadBytes(picked.bytes, picked.name, picked.handle);
+      const picked = await pickImages();
+      if (picked) await importImages(picked);
     } catch (e) {
       message(`Could not open the file: ${(e as Error).message}`, true);
     }
@@ -255,19 +303,26 @@ async function openImage(): Promise<void> {
 
 $('open-file').addEventListener('change', async (e) => {
   const input = e.target as HTMLInputElement;
-  const file = input.files?.[0];
+  const chosen = [...(input.files ?? [])];
   input.value = '';
-  if (file) await loadBytes(new Uint8Array(await file.arrayBuffer()), file.name, null);
+  if (!chosen.length) return;
+  const files = await Promise.all(
+    chosen.map(async (f) => ({ bytes: new Uint8Array(await f.arrayBuffer()), name: f.name, handle: null })),
+  );
+  await importImages(files);
 });
 
 async function saveImage(saveAs: boolean): Promise<void> {
   try {
     doc.commitFloating();
-    const bytes = await encodeImageFile(doc.px);
+    const bytes = await encodeImageFile(flatten(doc.layers));
     const name = /\.png$/i.test(fileName) ? fileName : `${fileName}.png`;
-    const saved = await saveBytes(bytes, handle, name, saveAs);
+    // A composite of several layers must not silently replace the PNG it was opened from.
+    const target = doc.layers.length > 1 && handleIsSource ? null : handle;
+    const saved = await saveBytes(bytes, target, name, saveAs);
     if (!saved) return;
     handle = saved.handle;
+    handleIsSource = false;
     fileName = saved.name;
     doc.markSaved();
     message(`Saved ${saved.name}`);
@@ -287,6 +342,7 @@ async function newImage(): Promise<void> {
   if (!r) return;
   doc.newImage(r.width, r.height);
   handle = null;
+  handleIsSource = false;
   fileName = 'untitled.png';
   view.fit();
   refreshStatus();

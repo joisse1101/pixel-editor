@@ -1,34 +1,4 @@
-## Purpose
-
-Defines rectangular selection of pixels in the pixel art editor, moving and copying them, and flipping or rotating either the selection or the whole image.
-
-## Requirements
-
-### Requirement: Rectangular selection
-The system SHALL let the user drag a rectangle with the Select tool to select the pixels inside it, clipped to the canvas. The selection SHALL be outlined on the canvas. Clicking outside the selection without dragging, or pressing Esc, SHALL clear it. Selecting SHALL NOT create an undo step.
-
-#### Scenario: Marquee
-- **WHEN** the user drags from (2, 2) to (5, 4) with the Select tool
-- **THEN** the 4x3 pixel region is selected and outlined
-
-#### Scenario: Deselect
-- **WHEN** a selection exists and the user presses Esc
-- **THEN** the selection is cleared and the image is unchanged
-
-### Requirement: Move selection
-The system SHALL, when the user drags inside the selection, lift its pixels and move them with the pointer by whole pixels, leaving fully transparent pixels where they were. Dropping SHALL write the pixels at the new position over what is there, except that fully transparent source pixels SHALL NOT overwrite anything. Parts moved outside the canvas SHALL be clipped. The move SHALL be one undoable step and the selection SHALL follow the pixels.
-
-#### Scenario: Move
-- **WHEN** the user drags a selection 3 pixels right
-- **THEN** its pixels appear 3 pixels to the right and the old area is transparent
-
-#### Scenario: Overlap with transparent source
-- **WHEN** a selection containing transparent pixels is dropped over opaque pixels
-- **THEN** the opaque pixels under the transparent source pixels are kept
-
-#### Scenario: Move off the canvas
-- **WHEN** a selection is dropped partly outside the canvas
-- **THEN** the outside part is discarded and the inside part is written
+## MODIFIED Requirements
 
 ### Requirement: Copy and paste
 The system SHALL copy the selection's pixels from the active layer with Ctrl+C, and paste them with Ctrl+V into the active layer as a new selection at the top-left of the visible canvas area (or at the original position when it is visible) that can be moved before it is committed. The clipboard and the selection rectangle SHALL remain when the active layer changes, so pixels can be pasted into a different layer. Alt + drag inside the selection SHALL move a copy within the active layer, leaving the original in place. Paste and copy-move SHALL each be one undoable step. The clipboard SHALL be in memory only.
@@ -48,13 +18,6 @@ The system SHALL copy the selection's pixels from the active layer with Ctrl+C, 
 #### Scenario: Paste into another layer
 - **WHEN** the user copies a selection on one layer, activates another layer and presses Ctrl+V
 - **THEN** the pasted selection appears on the newly active layer and the first layer is unchanged
-
-### Requirement: Delete selection
-The system SHALL set every pixel in the selection to fully transparent when the user presses Del or Backspace. The delete SHALL be one undoable step and the selection SHALL remain.
-
-#### Scenario: Delete
-- **WHEN** a selection exists and the user presses Del
-- **THEN** all pixels in it become (0, 0, 0, 0)
 
 ### Requirement: Flip
 The system SHALL mirror pixels horizontally or vertically on request. With a selection, only the selection's pixels on the active layer SHALL be mirrored inside its bounds. Without a selection, the whole canvas SHALL be mirrored, on every layer. A flip SHALL be one undoable step.
@@ -89,14 +52,3 @@ The system SHALL rotate pixels 90 degrees clockwise or counter-clockwise on requ
 #### Scenario: Undo rotate canvas
 - **WHEN** the user undoes a canvas rotation
 - **THEN** the previous size and pixels of every layer are restored
-
-### Requirement: Keyboard shortcuts
-The system SHALL provide shortcuts for the tools and transforms: P pencil, E eraser, I eyedropper, G fill, L line, R rectangle, S select, X flip horizontal, Y flip vertical, [ rotate counter-clockwise and ] rotate clockwise. Shortcuts SHALL NOT fire while a text field or dialog has focus.
-
-#### Scenario: Switch tool
-- **WHEN** the user presses L
-- **THEN** the Line tool becomes active
-
-#### Scenario: Typing in a field
-- **WHEN** the user types "e" in the width field of the resize dialog
-- **THEN** the tool does not change

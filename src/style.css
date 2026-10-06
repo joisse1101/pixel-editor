@@ -507,3 +507,63 @@ button.icon.on {
   background: #5b5bd6;
   border-color: #8a8af0;
 }
+
+/* Pixel editor layer panel */
+.px-layers {
+  width: 190px;
+  flex: none;
+  background: #25252c;
+  border-left: 1px solid #3a3a44;
+}
+.px-layers h3 {
+  margin: 4px 0 6px;
+}
+.px-layer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.px-layer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.px-layer:hover {
+  background: #2f2f3a;
+}
+.px-layer.active {
+  background: #34344a;
+  border-color: #8a8af0;
+}
+.px-layer.hidden .px-layer-name {
+  opacity: 0.5;
+}
+.px-eye {
+  display: inline-flex;
+  padding: 2px 4px;
+  border: none;
+  background: none;
+  color: inherit;
+}
+.px-layer-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.px-layer-rename {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+}
+.px-layer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}

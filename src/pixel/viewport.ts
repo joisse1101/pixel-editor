@@ -5,6 +5,12 @@ export const MAX_SCALE = 128;
 /** Screen pixels per image pixel below which grid lines would swamp the pixels. */
 export const MIN_GRID_SCALE = 6;
 
+/**
+ * Screen offset of the image origin after the canvas grew by `growth` image pixels on its left (or top)
+ * edge, chosen so the existing pixels stay where they were on screen. A negative growth is a shrink.
+ */
+export const offsetAfterGrow = (offset: number, growth: number, scale: number): number => offset - growth * scale;
+
 /** Maps between screen (canvas CSS px) and image pixel coordinates. Pure, no DOM. */
 export class Viewport {
   /** Screen pixels per image pixel. */
@@ -26,6 +32,12 @@ export class Viewport {
   panBy(dx: number, dy: number): void {
     this.ox += dx;
     this.oy += dy;
+  }
+
+  /** Keeps existing pixels in place on screen after the canvas grew by (gx, gy) at its left and top. */
+  compensateGrowth(gx: number, gy: number): void {
+    this.ox = offsetAfterGrow(this.ox, gx, this.scale);
+    this.oy = offsetAfterGrow(this.oy, gy, this.scale);
   }
 
   /** Multiplies the zoom by `factor` keeping the image point under (sx, sy) fixed. */

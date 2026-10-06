@@ -1,4 +1,6 @@
+import type { Pixels } from '../model/pngCodec';
 import type { PixelDocument } from './document';
+import { dragAnchor, dragSize, edgeCursor, hitEdges, previewRect, type Edges } from './edgeResize';
 import type { Point, Rgba } from './ops';
 import { LEVEL_COLORS } from './gridLevels';
 import { Viewport } from './viewport';
@@ -14,6 +16,17 @@ export interface PixelPointerHandlers {
 export interface PixelPreview {
   points: Iterable<Point>;
   color: Rgba;
+}
+
+/** An edge or corner drag in progress; nothing in the document changes until it is released. */
+interface EdgeDrag {
+  edges: Edges;
+  /** Screen position of the press. */
+  sx: number;
+  sy: number;
+  /** Canvas size when the press happened. */
+  start: { w: number; h: number };
+  size: { w: number; h: number };
 }
 
 const CHECK = 8;
@@ -33,10 +46,11 @@ export class PixelView {
   onHover: (p: Point | null) => void = () => {};
 
   private ctx: CanvasRenderingContext2D;
-  private layer = document.createElement('canvas');
+  /** One offscreen canvas per layer buffer, re-uploaded only when that layer changed. */
+  private layerCanvases = new Map<Pixels, { canvas: HTMLCanvasElement; dirty: boolean }>();
   private floatLayer = document.createElement('canvas');
-  private imageDirty = true;
   private floatSource: unknown = null;
+  private edgeDrag: EdgeDrag | null = null;
   private queued = false;
   private fitPending = true;
   private spaceHeld = false;
@@ -67,7 +81,9 @@ export class PixelView {
 
   /** The image content changed (call after any edit, load or undo). */
   invalidate(): void {
-    this.imageDirty = true;
+    // Edits happen in place on the active layer; other buffers are detected by identity when drawn.
+    const entry = this.layerCanvases.get(this.doc.px);
+    if (entry) entry.dirty = true;
     this.redraw();
   }
 
@@ -115,6 +131,14 @@ export class PixelView {
   // ---- Input ----
 
   private onKey(e: KeyboardEvent, down: boolean): void {
+    if (down && e.key === 'Escape' && this.edgeDrag) {
+      // Handled here first so the editor's own Esc handling (clear selection) does not also run.
+      e.stopImmediatePropagation();
+      this.edgeDrag = null;
+      this.canvas.style.cursor = this.spaceHeld ? 'grab' : '';
+      this.redraw();
+      return;
+    }
     if (e.code !== 'Space' || isTyping(e.target)) return;
     this.spaceHeld = down;
     this.canvas.style.cursor = down ? 'grab' : '';
@@ -139,8 +163,23 @@ export class PixelView {
       this.canvas.style.cursor = 'grabbing';
       return;
     }
+    if (e.button === 0) {
+      const { x, y } = this.screenAt(e);
+      const edges = hitEdges(x, y, this.viewport, this.doc.width, this.doc.height);
+      if (edges) {
+        const start = { w: this.doc.width, h: this.doc.height };
+        this.edgeDrag = { edges, sx: x, sy: y, start, size: start };
+        this.canvas.style.cursor = edgeCursor(edges);
+        return;
+      }
+    }
     this.tooling = true;
     this.handlers?.down(this.pointAt(e), e);
+  }
+
+  private screenAt(e: { clientX: number; clientY: number }): Point {
+    const r = this.canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
   }
 
   private onPointerMove(e: PointerEvent): void {
@@ -152,11 +191,40 @@ export class PixelView {
       this.redraw();
       return;
     }
+    if (this.edgeDrag) {
+      const d = this.edgeDrag;
+      const { x, y } = this.screenAt(e);
+      const scale = this.viewport.scale;
+      d.size = dragSize(d.edges, d.start, Math.round((x - d.sx) / scale), Math.round((y - d.sy) / scale));
+      this.redraw();
+      return;
+    }
     if (this.tooling) this.handlers?.move(this.pointAt(e), e);
+    else if (!this.spaceHeld) {
+      const { x, y } = this.screenAt(e);
+      const edges = hitEdges(x, y, this.viewport, this.doc.width, this.doc.height);
+      this.canvas.style.cursor = edges ? edgeCursor(edges) : '';
+    }
+  }
+
+  /** Applies a finished edge drag as one resize of every layer, keeping existing pixels where they were on screen. */
+  private commitEdgeDrag(d: EdgeDrag): void {
+    const { w, h } = d.size;
+    if (w === d.start.w && h === d.start.h) return;
+    const anchor = dragAnchor(d.edges);
+    this.doc.resize(w, h, anchor);
+    this.viewport.compensateGrowth(anchor.ax === 2 ? w - d.start.w : 0, anchor.ay === 2 ? h - d.start.h : 0);
+    this.redraw();
   }
 
   private onPointerUp(e: PointerEvent): void {
-    if (this.panning) {
+    if (this.edgeDrag) {
+      const d = this.edgeDrag;
+      this.edgeDrag = null;
+      this.canvas.style.cursor = this.spaceHeld ? 'grab' : '';
+      if (e.type !== 'pointercancel') this.commitEdgeDrag(d);
+      else this.redraw();
+    } else if (this.panning) {
       this.panning = false;
       this.canvas.style.cursor = this.spaceHeld ? 'grab' : '';
     } else if (this.tooling) {
@@ -182,13 +250,23 @@ export class PixelView {
   // ---- Drawing ----
 
   private uploadLayers(): void {
-    const { px, floating } = this.doc;
-    if (this.imageDirty || this.layer.width !== px.width || this.layer.height !== px.height) {
-      this.layer.width = px.width;
-      this.layer.height = px.height;
-      this.layer.getContext('2d')!.putImageData(new ImageData(px.data as Uint8ClampedArray<ArrayBuffer>, px.width, px.height), 0, 0);
-      this.imageDirty = false;
+    const { floating } = this.doc;
+    const live = new Set<Pixels>();
+    for (const { px } of this.doc.layers) {
+      live.add(px);
+      let entry = this.layerCanvases.get(px);
+      if (!entry) {
+        entry = { canvas: document.createElement('canvas'), dirty: true };
+        this.layerCanvases.set(px, entry);
+      }
+      if (entry.dirty || entry.canvas.width !== px.width || entry.canvas.height !== px.height) {
+        entry.canvas.width = px.width;
+        entry.canvas.height = px.height;
+        entry.canvas.getContext('2d')!.putImageData(new ImageData(px.data as Uint8ClampedArray<ArrayBuffer>, px.width, px.height), 0, 0);
+        entry.dirty = false;
+      }
     }
+    for (const px of this.layerCanvases.keys()) if (!live.has(px)) this.layerCanvases.delete(px);
     if (floating && this.floatSource !== floating.pixels) {
       const f = floating.pixels;
       this.floatLayer.width = f.width;
@@ -196,6 +274,36 @@ export class PixelView {
       this.floatLayer.getContext('2d')!.putImageData(new ImageData(f.data as Uint8ClampedArray<ArrayBuffer>, f.width, f.height), 0, 0);
     }
     this.floatSource = floating ? floating.pixels : null;
+  }
+
+  /** Outline of the canvas bounds a drag would produce, with its size; the layers are untouched. */
+  private drawEdgeDrag(d: EdgeDrag): void {
+    const ctx = this.ctx;
+    const { scale, ox, oy } = this.viewport;
+    const r = previewRect(d.edges, d.start, d.size);
+    const x = Math.round(ox + r.x * scale) + 0.5;
+    const y = Math.round(oy + r.y * scale) + 0.5;
+    const w = Math.round(r.w * scale);
+    const h = Math.round(r.h * scale);
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = '#000';
+    ctx.strokeRect(x, y, w, h);
+    ctx.lineDashOffset = 5;
+    ctx.strokeStyle = '#fff';
+    ctx.strokeRect(x, y, w, h);
+    ctx.setLineDash([]);
+    ctx.lineDashOffset = 0;
+    const label = `${d.size.w} x ${d.size.h}`;
+    ctx.font = '12px system-ui, sans-serif';
+    ctx.textBaseline = 'top';
+    const tw = ctx.measureText(label).width + 10;
+    const lx = Math.min(Math.max(x + w / 2 - tw / 2, 4), Math.max(4, this.cssW - tw - 4));
+    const ly = Math.min(Math.max(y + h + 6, 4), Math.max(4, this.cssH - 22));
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fillRect(lx, ly, tw, 18);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(label, lx + 5, ly + 3);
   }
 
   private draw(): void {
@@ -230,13 +338,15 @@ export class PixelView {
     }
 
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(this.layer, ox, oy, w * scale, h * scale);
-
+    // Layers bottom to top; floating pixels sit just above the layer they belong to (the active one).
     const floating = this.doc.floating;
-    if (floating) {
-      const r = floating.rect;
-      ctx.drawImage(this.floatLayer, ox + r.x * scale, oy + r.y * scale, r.w * scale, r.h * scale);
-    }
+    this.doc.layers.forEach((layer, i) => {
+      if (layer.visible) ctx.drawImage(this.layerCanvases.get(layer.px)!.canvas, ox, oy, w * scale, h * scale);
+      if (floating && i === this.doc.activeIndex) {
+        const r = floating.rect;
+        ctx.drawImage(this.floatLayer, ox + r.x * scale, oy + r.y * scale, r.w * scale, r.h * scale);
+      }
+    });
 
     if (this.preview) {
       const [r, g, b, a] = this.preview.color;
@@ -293,6 +403,8 @@ export class PixelView {
     ctx.strokeStyle = '#8a8af0';
     ctx.lineWidth = 1;
     ctx.strokeRect(Math.round(ox) - 0.5, Math.round(oy) - 0.5, Math.round(w * scale) + 1, Math.round(h * scale) + 1);
+
+    if (this.edgeDrag) this.drawEdgeDrag(this.edgeDrag);
 
     const sel = this.doc.selection;
     if (sel) {

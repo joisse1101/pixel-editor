@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_SCALE, MIN_GRID_SCALE, MIN_SCALE, Viewport } from '../src/pixel/viewport';
+import { MAX_SCALE, MIN_GRID_SCALE, MIN_SCALE, Viewport, offsetAfterGrow } from '../src/pixel/viewport';
 
 describe('Viewport coordinate mapping', () => {
   it('maps screen points to pixels at several zooms and offsets', () => {
@@ -101,5 +101,22 @@ describe('Viewport grid threshold', () => {
     expect(v.gridVisible).toBe(false);
     v.scale = MIN_GRID_SCALE;
     expect(v.gridVisible).toBe(true);
+  });
+});
+
+describe('Viewport growth compensation', () => {
+  it('moves the origin left by growth * scale so old pixels stay put', () => {
+    expect(offsetAfterGrow(100, 4, 10)).toBe(60);
+    expect(offsetAfterGrow(100, -3, 2)).toBe(106);
+    expect(offsetAfterGrow(100, 0, 8)).toBe(100);
+  });
+  it('keeps the screen position of an old pixel after left/top growth', () => {
+    const v = new Viewport();
+    v.scale = 8;
+    v.ox = 50;
+    v.oy = 30;
+    const before = v.toScreen(5, 7); // old pixel (5, 7)
+    v.compensateGrowth(4, 2); // it is now pixel (9, 9)
+    expect(v.toScreen(9, 9)).toEqual(before);
   });
 });

@@ -1,8 +1,4 @@
-## Purpose
-
-Defines how the pixel image is displayed and navigated: zoom, pan, the pixel grid and transparent areas, so individual pixels can be seen and targeted accurately.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Pixel-exact display
 The system SHALL draw each image pixel as a crisp, unsmoothed square at the current zoom, compositing the visible layers in stack order. Fully transparent pixels, where no visible layer has colour, SHALL be shown over a checkerboard so they can be told apart from opaque black or white.
@@ -19,34 +15,7 @@ The system SHALL draw each image pixel as a crisp, unsmoothed square at the curr
 - **WHEN** two visible layers overlap at an opaque pixel of the upper layer
 - **THEN** the upper layer's colour is shown there
 
-### Requirement: Zoom and pan
-The system SHALL zoom with the mouse wheel around the pointer and pan with middle-button drag or Space + left-drag. A Fit control SHALL scale and centre the whole image in the view. The image SHALL be fitted when an image is opened or created.
-
-#### Scenario: Wheel zoom
-- **WHEN** the user scrolls the wheel over a pixel
-- **THEN** the zoom changes and that pixel stays under the pointer
-
-#### Scenario: Pan
-- **WHEN** the user drags with the middle button
-- **THEN** the view moves with the pointer and the image is not edited
-
-### Requirement: Pixel grid
-The system SHALL offer a toggleable grid between pixels, on by default, shown only when pixels are large enough for it to be legible. The image boundary SHALL always be outlined.
-
-#### Scenario: Toggle
-- **WHEN** the user turns the grid off
-- **THEN** no lines are drawn between pixels
-
-#### Scenario: Low zoom
-- **WHEN** the zoom is small enough that grid lines would cover the pixels
-- **THEN** the grid is not drawn
-
-### Requirement: Pointer position readout
-The system SHALL show the image pixel coordinate under the pointer, and the RGBA of that pixel, while the pointer is over the image.
-
-#### Scenario: Hover
-- **WHEN** the pointer is over pixel (3, 5)
-- **THEN** "3, 5" and that pixel's colour are shown
+## ADDED Requirements
 
 ### Requirement: Drag canvas edges to resize
 The system SHALL let the user resize the canvas by dragging its edges and corners. A hit zone of a few screen pixels just outside the image boundary SHALL select an edge (left, right, top or bottom) or a corner, and the pointer SHALL show a resize cursor over it; presses on or inside the image SHALL NOT start a resize, so edge pixels can still be drawn on. Dragging an edge SHALL change that dimension and a corner SHALL change both, with the opposite edge or corner fixed, so existing pixels keep their position relative to the fixed side. The new size SHALL snap to whole pixels and be limited to 1 to 4096. While dragging, the system SHALL outline the new canvas bounds and show its width and height, without changing any layer. Releasing the pointer SHALL apply the resize to all layers as one undoable step and clear any selection; releasing with the size unchanged SHALL do nothing. Pressing Esc during the drag SHALL cancel it. The view SHALL NOT change zoom or pan during the drag.

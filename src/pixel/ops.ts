@@ -270,3 +270,50 @@ function copyInto(dst: Pixels, src: Pixels, ox: number, oy: number, skipTranspar
 
 /** Writes `src` onto `dst` at (ox, oy), clipped; fully transparent source pixels do not overwrite. */
 export const blit = (dst: Pixels, src: Pixels, ox: number, oy: number): void => copyInto(dst, src, ox, oy, true);
+
+// ---- Flatten ----
+
+export interface FlatLayer {
+  visible: boolean;
+  px: Pixels;
+}
+
+/**
+ * Visible layers composited bottom-first with source-over on straight RGBA; all layers share one size.
+ * The lowest visible layer is copied verbatim, so a single layer keeps even the colour of fully
+ * transparent pixels.
+ */
+export function flatten(layers: readonly FlatLayer[]): Pixels {
+  const out = createPixels(layers[0].px.width, layers[0].px.height);
+  const d = out.data;
+  let base = true;
+  for (const layer of layers) {
+    if (!layer.visible) continue;
+    const s = layer.px.data;
+    if (base) {
+      d.set(s);
+      base = false;
+      continue;
+    }
+    for (let i = 0; i < s.length; i += 4) {
+      const sa = s[i + 3];
+      if (sa === 0) continue;
+      const da = d[i + 3];
+      if (sa === 255 || da === 0) {
+        d[i] = s[i];
+        d[i + 1] = s[i + 1];
+        d[i + 2] = s[i + 2];
+        d[i + 3] = sa;
+        continue;
+      }
+      const a = sa / 255;
+      const b = (da / 255) * (1 - a);
+      const ao = a + b;
+      d[i] = Math.round((s[i] * a + d[i] * b) / ao);
+      d[i + 1] = Math.round((s[i + 1] * a + d[i + 1] * b) / ao);
+      d[i + 2] = Math.round((s[i + 2] * a + d[i + 2] * b) / ao);
+      d[i + 3] = Math.round(ao * 255);
+    }
+  }
+  return out;
+}
