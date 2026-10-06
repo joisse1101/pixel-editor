@@ -36,6 +36,7 @@ app.innerHTML = `
     </span>
     <label><input id="grid" type="checkbox" checked /> Grid</label>
     <button id="fit" type="button">Fit</button>
+    <button id="map-size" type="button" title="Change map width and height">Map size</button>
     <span id="zoom"></span>
     <span id="cell"></span>
   </header>
@@ -364,6 +365,26 @@ $('layer-delete').addEventListener('click', () => {
   if (layer.cells.size > 0 && !confirm(`Delete layer "${layer.name}" and its ${layer.cells.size} tiles? This cannot be undone.`)) return;
   editor.deleteLayer(activeLayer);
   activeLayer = Math.min(activeLayer, project.layers.length - 1);
+  refresh();
+});
+$('map-size').addEventListener('click', () => {
+  if (!editor || !project) return;
+  const b = getMapBounds(project);
+  const answer = prompt('Map size in tiles (width x height)', `${b.width}x${b.height}`);
+  if (!answer) return;
+  const m = /^\s*(\d+)\s*[x,* ]\s*(\d+)\s*$/i.exec(answer);
+  const w = m ? Number(m[1]) : 0;
+  const h = m ? Number(m[2]) : 0;
+  if (w < 1 || h < 1) {
+    reportError('Resize failed', new Error('Enter a size like 50x30'));
+    return;
+  }
+  const drop = editor.tilesOutside(w, h);
+  if (drop > 0 && !confirm(`Shrinking to ${w}x${h} removes ${drop} tiles outside the new bounds. This cannot be undone. Continue?`)) return;
+  editor.resizeMap(w, h);
+  status.classList.remove('error');
+  status.textContent = `Map resized to ${w}x${h}${drop ? `, ${drop} tiles removed` : ''}`;
+  view.fit();
   refresh();
 });
 $('layer-up').addEventListener('click', () => moveActiveLayer(-1));

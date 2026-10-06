@@ -1,4 +1,5 @@
-import { cellKey, type Layer, type PlacedTile, type Project } from '../model/types';
+import { getMapBounds } from '../model/office';
+import { cellKey, parseCellKey, type Layer, type PlacedTile, type Project } from '../model/types';
 import { applyOrientOp, type OrientOp, type Orientation } from './orientation';
 
 /** What the paint tool places: a sheet tile plus its orientation. */
@@ -160,6 +161,48 @@ export class Editor {
     this.undoStack = [];
     this.redoStack = [];
     this.structureChanged();
+  }
+
+  /** Number of tiles that would be dropped by resizing the map to width x height from its origin. */
+  tilesOutside(width: number, height: number): number {
+    const b = getMapBounds(this.project);
+    let n = 0;
+    for (const l of this.project.layers) {
+      for (const key of l.cells.keys()) {
+        const [x, y] = parseCellKey(key);
+        if (x < b.x || y < b.y || x >= b.x + width || y >= b.y + height) n++;
+      }
+    }
+    return n;
+  }
+
+  /**
+   * Sets the map size, keeping the top-left origin, and removes tiles outside the new rectangle.
+   * Returns the number of tiles removed. Undo history is cleared only when tiles were removed.
+   */
+  resizeMap(width: number, height: number): number {
+    if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) {
+      throw new Error('Map size must be whole numbers of at least 1');
+    }
+    const b = getMapBounds(this.project);
+    let removed = 0;
+    for (const l of this.project.layers) {
+      for (const key of [...l.cells.keys()]) {
+        const [x, y] = parseCellKey(key);
+        if (x < b.x || y < b.y || x >= b.x + width || y >= b.y + height) {
+          l.cells.delete(key);
+          removed++;
+        }
+      }
+    }
+    this.project.mapOrigin = { x: b.x, y: b.y };
+    this.project.mapSize = { width, height };
+    if (removed > 0) {
+      this.undoStack = [];
+      this.redoStack = [];
+    }
+    this.structureChanged();
+    return removed;
   }
 
   canUndo(): boolean {

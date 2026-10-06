@@ -9,7 +9,7 @@
 - [x] 2.2 Implement Office.json parse with validation errors for missing `layers`/`spriteSheets`/`tileSize` and verify invalid input leaves the loaded project untouched (unit test)
 - [x] 2.3 Implement Office.json serialize incl. optional `rotation`, `settings.mapSize` and `settings.mapOrigin`, and verify import -> save -> import yields an equal project and an unedited save preserves all original fields (round-trip test on the sample)
 - [x] 2.4 Derive map origin and size from tile bounds when `mapOrigin`/`mapSize` are absent and verify the sample gives origin (21,4) and 40x26 (unit test)
-- [ ] 2.5 Open/save via File System Access API with download/upload fallback, plus unsaved-changes `beforeunload` warning; verify manually in Chrome and in a browser without the API
+- [x] 2.5 Open/save via File System Access API with download/upload fallback, plus unsaved-changes `beforeunload` warning; verify manually in Chrome and in a browser without the API
 
 ## 3. Rendering (tile-editing)
 
@@ -27,10 +27,10 @@
 
 ## 5. Layers (layer-management)
 
-- [ ] 5.1 Build the layer list panel with selection and per-layer visibility toggle saved as `visible: false` in Office.json; verify hidden layers keep their tiles and are still baked for Phaser (unit test)
-- [ ] 5.2 Add, rename and delete layers (confirm when non-empty); verify via saved Office.json
-- [ ] 5.3 Reorder layers (drag or up/down buttons) and verify draw order and saved order change accordingly
-- [ ] 5.4 Collider flag toggle; verify it is written to Office.json and reflected in the bake (covered again in 7.4)
+- [x] 5.1 Build the layer list panel with selection and per-layer visibility toggle saved as `visible: false` in Office.json; verify hidden layers keep their tiles and are still baked for Phaser (unit test)
+- [x] 5.2 Add, rename and delete layers (confirm when non-empty); verify via saved Office.json
+- [x] 5.3 Reorder layers (drag or up/down buttons) and verify draw order and saved order change accordingly
+- [x] 5.4 Collider flag toggle; verify it is written to Office.json and reflected in the bake (covered again in 7.4)
 
 ## 6. Tilesets (tileset-management)
 
