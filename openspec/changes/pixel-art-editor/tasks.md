@@ -19,8 +19,8 @@
 
 ## 4. File I/O
 
-- [ ] 4.1 Extend `src/io/files.ts` with `pickImage()` and `saveBytes()` (binary, PNG filter, handle reuse, Save As, download fallback); verify the existing text save/open still works and the download fallback is used when the picker API is missing
-- [ ] 4.2 Add `src/pixel/pngFile.ts` to decode a picked file to `Pixels` (codec first, canvas fallback) and encode for saving; verify a round-trip test keeps every RGBA value including alpha 0 and alpha 128 and that an invalid file raises an error
+- [x] 4.1 Extend `src/io/files.ts` with `pickImage()` and `saveBytes()` (binary, PNG filter, handle reuse, Save As, download fallback); verify the existing text save/open still works and the download fallback is used when the picker API is missing
+- [x] 4.2 Add `src/pixel/pngFile.ts` to decode a picked file to `Pixels` (codec first, canvas fallback) and encode for saving; verify a round-trip test keeps every RGBA value including alpha 0 and alpha 128 and that an invalid file raises an error
 
 ## 5. Canvas view
 
