@@ -40,5 +40,5 @@
 
 ## 7. Verification
 
-- [ ] 7.1 Run `npm test` and `npm run build`; verify both pass with no TypeScript errors
-- [ ] 7.2 Manual end-to-end pass in the browser: open a PNG, draw with every tool, move/flip/rotate a selection, rotate and resize the canvas, undo all the way back, save and reopen; verify the saved PNG matches what the editor showed and the map page still works via the nav bar
+- [x] 7.1 Run `npm test` and `npm run build`; verify both pass with no TypeScript errors
+- [x] 7.2 Manual end-to-end pass in the browser: open a PNG, draw with every tool, move/flip/rotate a selection, rotate and resize the canvas, undo all the way back, save and reopen; verify the saved PNG matches what the editor showed and the map page still works via the nav bar
