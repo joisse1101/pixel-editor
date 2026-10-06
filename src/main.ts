@@ -42,19 +42,49 @@ app.innerHTML = `
       ?
       <div class="help-panel">
         <h4>Palette</h4>
-        <p><kbd>Drag</kbd> select a block of tiles as the brush &middot; <kbd>Click</kbd> one tile &middot; <kbd>Wheel</kbd> / <kbd>Middle-drag</kbd> / <kbd>Space+drag</kbd> pan &middot; <kbd>Ctrl+Wheel</kbd> zoom</p>
-        <h4>Map with a brush</h4>
-        <p><kbd>Click</kbd> stamp &middot; <kbd>Drag</kbd> paint freehand &middot; <kbd>Shift+Drag</kbd> fill a rectangle with the pattern &middot; <kbd>Esc</kbd> drop the brush</p>
-        <h4>Map without a brush</h4>
-        <p><kbd>Drag</kbd> draw a selection &middot; <kbd>Drag inside it</kbd> move &middot; <kbd>Alt+Drag</kbd> copy &middot; <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> copy, paste (click to place) &middot; <kbd>Del</kbd> delete &middot; <kbd>Esc</kbd> clear</p>
-        <h4>Deleting</h4>
-        <p><kbd>Right-click</kbd> / <kbd>Right-drag</kbd> delete &middot; <kbd>Shift+Right-drag</kbd> delete a rectangle</p>
+        <dl>
+          <dt><kbd>Drag</kbd></dt><dd>Select a block of tiles as the brush</dd>
+          <dt><kbd>Click</kbd></dt><dd>Select one tile</dd>
+        </dl>
+        <h4>Map, with a brush</h4>
+        <dl>
+          <dt><kbd>Click</kbd></dt><dd>Stamp the brush</dd>
+          <dt><kbd>Drag</kbd></dt><dd>Paint freehand</dd>
+          <dt><kbd>Shift + Drag</kbd></dt><dd>Fill a rectangle with the pattern</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Drop the brush</dd>
+        </dl>
+        <h4>Map, no brush</h4>
+        <dl>
+          <dt><kbd>Drag</kbd></dt><dd>Select an area</dd>
+          <dt><kbd>Drag inside selection</kbd></dt><dd>Move it</dd>
+          <dt><kbd>Alt + Drag</kbd></dt><dd>Copy it</dd>
+          <dt><kbd>Ctrl + C</kbd></dt><dd>Copy selection</dd>
+          <dt><kbd>Ctrl + V</kbd></dt><dd>Paste, then click to place</dd>
+          <dt><kbd>Del</kbd></dt><dd>Delete selection</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Clear selection or cancel paste</dd>
+        </dl>
+        <h4>Delete</h4>
+        <dl>
+          <dt><kbd>Right-click / drag</kbd></dt><dd>Delete tiles</dd>
+          <dt><kbd>Shift + Right-drag</kbd></dt><dd>Delete a rectangle</dd>
+        </dl>
         <h4>Layers</h4>
-        <p><kbd>Click</kbd> a layer: blue, paint here, clears yellow &middot; <kbd>Right-click</kbd> a layer: toggle yellow. Select, move, copy, paste and delete act on blue and yellow layers</p>
+        <dl>
+          <dt><kbd>Click layer</kbd></dt><dd>Make it blue (paint here)</dd>
+          <dt><kbd>Right-click layer</kbd></dt><dd>Toggle yellow (also edited)</dd>
+        </dl>
         <h4>View</h4>
-        <p><kbd>Wheel</kbd> zoom &middot; <kbd>Middle-drag</kbd> or <kbd>Space+drag</kbd> pan &middot; the right button does not pan</p>
+        <dl>
+          <dt><kbd>Wheel</kbd></dt><dd>Zoom</dd>
+          <dt><kbd>Middle-drag / Space + Drag</kbd></dt><dd>Pan</dd>
+        </dl>
         <h4>Keys</h4>
-        <p><kbd>X</kbd> / <kbd>Y</kbd> flip &middot; <kbd>R</kbd> / <kbd>Shift+R</kbd> rotate (paste, selection or brush) &middot; <kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd> undo, redo &middot; <kbd>Ctrl+S</kbd> save</p>
+        <dl>
+          <dt><kbd>X / Y</kbd></dt><dd>Flip horizontally / vertically</dd>
+          <dt><kbd>R / Shift + R</kbd></dt><dd>Rotate clockwise / counter-clockwise</dd>
+          <dt><kbd>Ctrl + Z / Ctrl + Y</kbd></dt><dd>Undo / redo</dd>
+          <dt><kbd>Ctrl + S</kbd></dt><dd>Save</dd>
+        </dl>
       </div>
     </span>
   </header>
