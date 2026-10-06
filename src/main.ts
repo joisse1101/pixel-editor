@@ -37,7 +37,15 @@ app.innerHTML = `
   <div class="main">
     <aside class="panel left">
       <h3>Layers</h3>
+      <div class="group layer-actions">
+        <button id="layer-add" type="button" title="Add layer above the selected one">+</button>
+        <button id="layer-up" type="button" title="Move up">&#9650;</button>
+        <button id="layer-down" type="button" title="Move down">&#9660;</button>
+        <button id="layer-rename" type="button" title="Rename">Rename</button>
+        <button id="layer-delete" type="button" title="Delete layer">Delete</button>
+      </div>
       <ul id="layers"></ul>
+      <p class="hint">Eye = show/hide (editor only). C = collider.</p>
     </aside>
     <canvas id="map"></canvas>
     <aside class="panel right">
@@ -165,13 +173,51 @@ function renderLayers(): void {
   project.layers.forEach((layer, i) => {
     const li = document.createElement('li');
     li.className = i === activeLayer ? 'active' : '';
-    li.textContent = `${layer.name} (${layer.cells.size})`;
+    const hidden = view.hiddenLayers.has(layer.id);
+
+    const eye = document.createElement('button');
+    eye.type = 'button';
+    eye.className = 'icon';
+    eye.title = hidden ? 'Show layer' : 'Hide layer';
+    eye.textContent = hidden ? '—' : '◉';
+    eye.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (hidden) view.hiddenLayers.delete(layer.id);
+      else view.hiddenLayers.add(layer.id);
+      refresh();
+    });
+
+    const name = document.createElement('span');
+    name.className = 'name' + (hidden ? ' dim' : '');
+    name.textContent = `${layer.name} (${layer.cells.size})`;
+
+    const col = document.createElement('button');
+    col.type = 'button';
+    col.className = 'icon' + (layer.collider ? ' on' : '');
+    col.title = 'Collider';
+    col.textContent = 'C';
+    col.addEventListener('click', (e) => {
+      e.stopPropagation();
+      editor?.setCollider(i, !layer.collider);
+      refresh();
+    });
+
+    li.append(eye, name, col);
     li.addEventListener('click', () => {
       activeLayer = i;
       refresh();
     });
     ul.append(li);
   });
+}
+
+function moveActiveLayer(delta: number): void {
+  if (!editor) return;
+  const to = activeLayer + delta;
+  if (to < 0 || to >= editor.project.layers.length) return;
+  editor.moveLayer(activeLayer, to);
+  activeLayer = to;
+  refresh();
 }
 
 function undo(): void {
@@ -231,6 +277,31 @@ $('flip-h').addEventListener('click', () => orient('flipH'));
 $('flip-v').addEventListener('click', () => orient('flipV'));
 $('rot-cw').addEventListener('click', () => orient('rotateCW'));
 $('rot-ccw').addEventListener('click', () => orient('rotateCCW'));
+$('layer-add').addEventListener('click', () => {
+  if (!editor) return;
+  const name = prompt('New layer name', 'New layer');
+  if (!name) return;
+  editor.addLayer(activeLayer, name);
+  refresh();
+});
+$('layer-rename').addEventListener('click', () => {
+  if (!editor || !project) return;
+  const name = prompt('Layer name', project.layers[activeLayer].name);
+  if (!name) return;
+  editor.renameLayer(activeLayer, name);
+  refresh();
+});
+$('layer-delete').addEventListener('click', () => {
+  if (!editor || !project || project.layers.length <= 1) return;
+  const layer = project.layers[activeLayer];
+  if (layer.cells.size > 0 && !confirm(`Delete layer "${layer.name}" and its ${layer.cells.size} tiles? This cannot be undone.`)) return;
+  view.hiddenLayers.delete(layer.id);
+  editor.deleteLayer(activeLayer);
+  activeLayer = Math.min(activeLayer, project.layers.length - 1);
+  refresh();
+});
+$('layer-up').addEventListener('click', () => moveActiveLayer(-1));
+$('layer-down').addEventListener('click', () => moveActiveLayer(1));
 $('undo').addEventListener('click', undo);
 $('redo').addEventListener('click', redo);
 

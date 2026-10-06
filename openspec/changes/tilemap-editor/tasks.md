@@ -19,9 +19,9 @@
 
 ## 4. Editing tools (tile-editing)
 
-- [ ] 4.1 Implement paint (click and drag) enforcing one tile per cell per layer and verify replace behaviour (unit test + manual)
+- [x] 4.1 Implement paint (click and drag) enforcing one tile per cell per layer and verify replace behaviour (unit test + manual)
 - [x] 4.2 Implement eraser on the active layer only and verify tiles on other layers remain (unit test)
-- [ ] 4.3 Implement flip H/V and rotate controls for the brush and for placed tiles, with keyboard shortcuts; verify stored `scaleX/scaleY/rotation` values (unit test)
+- [x] 4.3 Implement flip H/V and rotate controls for the brush and for placed tiles, with keyboard shortcuts; verify stored `scaleX/scaleY/rotation` values (unit test)
 - [x] 4.4 Implement undo/redo with per-stroke diffs and verify a multi-cell stroke reverts in one step (unit test)
 - [ ] 4.5 Implement map resize (grow/shrink) with confirmation when tiles would be dropped; verify tiles outside the bounds are removed only after confirmation and `mapSize` is saved
 
@@ -34,7 +34,7 @@
 
 ## 6. Tilesets (tileset-management)
 
-- [ ] 6.1 Palette panel listing sheets as selectable 16px tile grids; verify selecting a tile sets the brush
+- [x] 6.1 Palette panel listing sheets as selectable 16px tile grids; verify selecting a tile sets the brush
 - [ ] 6.2 Import PNG as a new sheet (slice by tile size, warn on partial tiles); verify import of a 64x32 PNG yields 8 tiles and is embedded on save (unit test)
 - [ ] 6.3 Per-tile attribute editor (add/edit/remove key/value with generated uuid); verify it round-trips in Office.json
 - [ ] 6.4 Block deleting a sheet that has placed tiles and show the usage count; verify the message and that unused sheets can be removed

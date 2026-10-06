@@ -132,3 +132,46 @@ describe('orientation ops on placed tiles', () => {
     }
   });
 });
+
+describe('layer management', () => {
+  const names = (e: Editor) => e.project.layers.map((l) => l.name);
+
+  it('adds, renames and deletes layers, reflected in the saved file', () => {
+    const e = new Editor(sample());
+    e.addLayer(0, 'Overlay');
+    expect(names(e)[0]).toBe('Overlay');
+    expect(e.project.layers[0].cells.size).toBe(0);
+    e.renameLayer(0, 'Top');
+    const saved: any = JSON.parse(JSON.stringify(serializeOfficeJson(e.project)));
+    expect(saved.layers).toHaveLength(11);
+    expect(saved.layers[0]).toMatchObject({ name: 'Top', tiles: [], collider: false });
+    e.deleteLayer(0);
+    expect(e.project.layers).toHaveLength(10);
+    expect(e.dirty).toBe(true);
+  });
+
+  it('reorders layers and keeps the new order on save and re-import', () => {
+    const e = new Editor(sample());
+    const before = names(e);
+    e.moveLayer(2, 0);
+    expect(names(e)).toEqual([before[2], before[0], before[1], ...before.slice(3)]);
+    const again = parseOfficeJson(JSON.parse(JSON.stringify(serializeOfficeJson(e.project))));
+    expect(again.layers.map((l) => l.name)).toEqual(names(e));
+  });
+
+  it('toggles the collider flag and writes it to the file', () => {
+    const e = new Editor(sample());
+    const was = e.project.layers[1].collider;
+    e.setCollider(1, !was);
+    const saved: any = serializeOfficeJson(e.project);
+    expect(saved.layers[1].collider).toBe(!was);
+  });
+
+  it('clears undo history when a layer is deleted so undo cannot hit a missing layer', () => {
+    const e = new Editor(sample());
+    e.stroke(() => e.paint(1, 0, 0, brush()));
+    e.deleteLayer(1);
+    expect(e.canUndo()).toBe(false);
+    expect(e.undo()).toBe(false);
+  });
+});

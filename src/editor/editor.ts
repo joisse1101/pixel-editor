@@ -1,4 +1,4 @@
-import { cellKey, type PlacedTile, type Project } from '../model/types';
+import { cellKey, type Layer, type PlacedTile, type Project } from '../model/types';
 import { applyOrientOp, type OrientOp, type Orientation } from './orientation';
 
 /** What the paint tool places: a sheet tile plus its orientation. */
@@ -105,6 +105,55 @@ export class Editor {
     const tile = this.project.layers[layerIndex].cells.get(cellKey(cx, cy));
     if (!tile) return false;
     return this.setCell(layerIndex, cx, cy, { ...tile, ...applyOrientOp(tile, op) });
+  }
+
+  private structureChanged(): void {
+    this.dirty = true;
+    this.onChange();
+  }
+
+  /** Inserts a new empty layer at `index` in file order (0 = top of the stack). */
+  addLayer(index: number, name: string): Layer {
+    const layer: Layer = {
+      id: crypto.randomUUID(),
+      name,
+      description: '',
+      collider: false,
+      isAutoTile: false,
+      rules: [],
+      defaultTileVariants: [],
+      cells: new Map(),
+      extra: {},
+    };
+    this.project.layers.splice(index, 0, layer);
+    this.structureChanged();
+    return layer;
+  }
+
+  renameLayer(index: number, name: string): void {
+    this.project.layers[index].name = name;
+    this.structureChanged();
+  }
+
+  setCollider(index: number, collider: boolean): void {
+    this.project.layers[index].collider = collider;
+    this.structureChanged();
+  }
+
+  /** Moves a layer from one file-order position to another. */
+  moveLayer(from: number, to: number): void {
+    const layers = this.project.layers;
+    if (from === to || from < 0 || to < 0 || from >= layers.length || to >= layers.length) return;
+    layers.splice(to, 0, ...layers.splice(from, 1));
+    this.structureChanged();
+  }
+
+  /** Removes a layer with its tiles. Undo history is cleared because it may refer to the layer. */
+  deleteLayer(index: number): void {
+    this.project.layers.splice(index, 1);
+    this.undoStack = [];
+    this.redoStack = [];
+    this.structureChanged();
   }
 
   canUndo(): boolean {

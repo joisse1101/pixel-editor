@@ -101,6 +101,9 @@ button.active {
 }
 
 #layers li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 5px 8px;
   border-radius: 4px;
   cursor: pointer;
@@ -136,4 +139,40 @@ button.active {
   display: block;
   image-rendering: pixelated;
   cursor: pointer;
+}
+
+.layer-actions {
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+#layers .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#layers .name.dim {
+  opacity: 0.45;
+}
+
+button.icon {
+  padding: 0 6px;
+  min-width: 22px;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+button.icon.on {
+  background: #d6a35b;
+  border-color: #f0c98a;
+  color: #1e1e24;
+}
+
+.hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #9a9aab;
 }

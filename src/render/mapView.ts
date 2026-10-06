@@ -38,6 +38,8 @@ export class MapView {
   selectedCell: [number, number] | null = null;
   handlers: PointerHandlers | null = null;
   spaceHeld = false;
+  /** Layers hidden in the editor only; never written to the project. */
+  hiddenLayers = new Set<string>();
   private zoom = 1;
   private panX = 0;
   private panY = 0;
@@ -65,6 +67,7 @@ export class MapView {
     this.project = project;
     this.hoverCell = null;
     this.selectedCell = null;
+    this.hiddenLayers = new Set();
     this.fit();
   }
 
@@ -186,6 +189,7 @@ export class MapView {
 
     // Last layer in the file is the bottom, so draw from the end.
     for (let i = project.layers.length - 1; i >= 0; i--) {
+      if (this.hiddenLayers.has(project.layers[i].id)) continue;
       for (const [key, tile] of project.layers[i].cells) {
         const [cx, cy] = parseCellKey(key);
         ctx.save();
