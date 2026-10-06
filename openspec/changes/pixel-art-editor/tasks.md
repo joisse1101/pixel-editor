@@ -1,8 +1,8 @@
 ## 1. Pages and navigation
 
-- [ ] 1.1 Add `vite.config.ts` with both HTML inputs and `pixel.html` loading `src/pixel/main.ts`; verify `npm run build` emits both pages and `npm run dev` serves `/pixel.html`
-- [ ] 1.2 Add `src/ui/nav.ts` (`mountNav(current)`, links "Map Editor" / "Pixel Art Editor", current marked) with nav styles; verify with a unit test of the generated markup (current link flagged, hrefs correct)
-- [ ] 1.3 Call `mountNav('map')` in `src/main.ts` after the DOM is built; verify the map page still builds, `npm test` passes and the toolbar/panels fill the space below the nav
+- [x] 1.1 Add `vite.config.ts` with both HTML inputs and `pixel.html` loading `src/pixel/main.ts`; verify `npm run build` emits both pages and `npm run dev` serves `/pixel.html`
+- [x] 1.2 Add `src/ui/nav.ts` (`mountNav(current)`, links "Map Editor" / "Pixel Art Editor", current marked) with nav styles; verify with a unit test of the generated markup (current link flagged, hrefs correct)
+- [x] 1.3 Call `mountNav('map')` in `src/main.ts` after the DOM is built; verify the map page still builds, `npm test` passes and the toolbar/panels fill the space below the nav
 
 ## 2. Image operations (pure, no DOM)
 

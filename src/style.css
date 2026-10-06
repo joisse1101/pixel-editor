@@ -373,3 +373,31 @@ button.icon.on {
 .help-panel dd {
   color: #c9c9d4;
 }
+
+.app-nav {
+  display: flex;
+  gap: 4px;
+  padding: 0 12px;
+  height: 32px;
+  flex: none;
+  background: #1a1a20;
+  border-bottom: 1px solid #3a3a44;
+}
+
+.app-nav a {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  color: #a8a8b8;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+
+.app-nav a:hover {
+  color: #e6e6ea;
+}
+
+.app-nav a.current {
+  color: #e6e6ea;
+  border-bottom-color: #8a8af0;
+}

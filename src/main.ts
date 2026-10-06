@@ -8,6 +8,7 @@ import type { Block, Project } from './model/types';
 import { drawTile, MapView } from './render/mapView';
 import { decodeSheets } from './render/sheets';
 import { Palette, type PaletteSelection } from './ui/palette';
+import { mountNav } from './ui/nav';
 import './style.css';
 
 const app = document.getElementById('app')!;
@@ -121,6 +122,7 @@ app.innerHTML = `
   <dialog id="attr-dialog"></dialog>
   <dialog id="new-dialog"></dialog>
 `;
+mountNav('map');
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>('map');
