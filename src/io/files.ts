@@ -1,6 +1,6 @@
 /** Minimal typings for the File System Access API (not in the default TS DOM lib). */
 interface WritableHandle {
-  createWritable(): Promise<{ write(data: string | Uint8Array): Promise<void>; close(): Promise<void> }>;
+  createWritable(): Promise<{ write(data: string | Uint8Array): Promise<void>; close(): Promise<void>; abort?(): Promise<void> }>;
 }
 export interface FileHandle extends WritableHandle {
   name: string;
@@ -63,8 +63,13 @@ async function save(
   try {
     const target = !handle || saveAs ? await picker().showSaveFilePicker!({ suggestedName, types }) : handle;
     const w = await target.createWritable();
-    await w.write(data);
-    await w.close();
+    try {
+      await w.write(data);
+      await w.close();
+    } catch (err) {
+      await w.abort?.().catch(() => {}); // release the file lock and drop the temp swap file
+      throw err;
+    }
     return { handle: target, name: target.name };
   } catch (e) {
     if (isAbort(e)) return null;
