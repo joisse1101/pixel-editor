@@ -6,11 +6,11 @@
 
 ## 2. Image operations (pure, no DOM)
 
-- [ ] 2.1 Add `src/pixel/ops.ts` with `line` (Bresenham), `rectOutline`, `rectFill` and Shift constraints (45° line, square); verify tests for horizontal, diagonal, reverse direction and clipped rectangles
-- [ ] 2.2 Add `floodFill` (4-connected, exact RGBA match, no-op when colour equal); verify tests for bounded region, diagonal non-connection and same-colour no-op
-- [ ] 2.3 Add `flip` and `rotate` for a rect or whole image, including canvas rotation swapping size and selection rotation about the centre with clipping; verify tests for 4x2 canvas rotate, square selection rotate, non-square selection rotate, clipped result and flip of selection vs canvas
-- [ ] 2.4 Add `resize` with 3x3 anchor (grow pads transparent, shrink crops, no scaling) and size validation 1..4096; verify tests for top-left, center and bottom-right anchors and invalid sizes
-- [ ] 2.5 Add `blit` (transparent source pixels do not overwrite, clipped to canvas); verify tests for overlap and off-canvas cases
+- [x] 2.1 Add `src/pixel/ops.ts` with `line` (Bresenham), `rectOutline`, `rectFill` and Shift constraints (45° line, square); verify tests for horizontal, diagonal, reverse direction and clipped rectangles
+- [x] 2.2 Add `floodFill` (4-connected, exact RGBA match, no-op when colour equal); verify tests for bounded region, diagonal non-connection and same-colour no-op
+- [x] 2.3 Add `flip` and `rotate` for a rect or whole image, including canvas rotation swapping size and selection rotation about the centre with clipping; verify tests for 4x2 canvas rotate, square selection rotate, non-square selection rotate, clipped result and flip of selection vs canvas
+- [x] 2.4 Add `resize` with 3x3 anchor (grow pads transparent, shrink crops, no scaling) and size validation 1..4096; verify tests for top-left, center and bottom-right anchors and invalid sizes
+- [x] 2.5 Add `blit` (transparent source pixels do not overwrite, clipped to canvas); verify tests for overlap and off-canvas cases
 
 ## 3. History and document model
 
