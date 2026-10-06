@@ -15,7 +15,7 @@
 
 - [ ] 3.1 Render visible layers on a canvas in correct stacking (last layer in file at bottom) with flip and rotation, and verify visually against `spritesheet.png` + `map.json` for the sample
 - [ ] 3.2 Add zoom, pan and optional grid lines; verify wheel zoom and drag pan behaviour manually
-- [ ] 3.3 Implement the transform helper (flip then rotate on 16x16 pixel data) and verify all 8 orientations against known pixel patterns (unit test)
+- [x] 3.3 Implement the transform helper (flip then rotate on 16x16 pixel data) and verify all 8 orientations against known pixel patterns (unit test)
 
 ## 4. Editing tools (tile-editing)
 
