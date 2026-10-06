@@ -24,15 +24,15 @@
 
 ## 5. Canvas view
 
-- [ ] 5.1 Add `src/pixel/view.ts` drawing the image crisply over a checkerboard with fit, wheel zoom about the pointer, middle/Space pan, boundary outline and grid shown only above a minimum pixel size; verify manually in the browser at high and low zoom and with a transparent image
-- [ ] 5.2 Add pointer-to-pixel hit-testing and the hover readout (coordinate and RGBA); verify a unit test of the coordinate mapping at several zooms and offsets and manual hover check
+- [x] 5.1 Add `src/pixel/view.ts` drawing the image crisply over a checkerboard with fit, wheel zoom about the pointer, middle/Space pan, boundary outline and grid shown only above a minimum pixel size; verify manually in the browser at high and low zoom and with a transparent image
+- [x] 5.2 Add pointer-to-pixel hit-testing and the hover readout (coordinate and RGBA); verify a unit test of the coordinate mapping at several zooms and offsets and manual hover check
 
 ## 6. Page UI and tools
 
-- [ ] 6.1 Build the `src/pixel/main.ts` page shell: nav, toolbar (New, Open, Save, Save As, Undo, Redo, Flip H/V, Rotate, Resize, Grid, Fit), tool buttons, colour picker with alpha and recent colours, status row; verify the page loads with a transparent 32x32 canvas
-- [ ] 6.2 Wire Pencil (gap-free strokes, exact replace, one step), Eraser and right-click erase, Eyedropper and Alt+click; verify manually and with the document tests from 3.2
-- [ ] 6.3 Wire Fill, Line and Rectangle (outline/filled toggle, preview while dragging, Shift constraints, Esc cancels, commit on release); verify the image is unchanged until release and each is one undo step
-- [ ] 6.4 Wire Select (marquee, move, Alt-drag copy, Ctrl+C/V, Del, Esc, deselect on outside click); verify moving off-canvas clips and a move is one undo step
+- [x] 6.1 Build the `src/pixel/main.ts` page shell: nav, toolbar (New, Open, Save, Save As, Undo, Redo, Flip H/V, Rotate, Resize, Grid, Fit), tool buttons, colour picker with alpha and recent colours, status row; verify the page loads with a transparent 32x32 canvas
+- [x] 6.2 Wire Pencil (gap-free strokes, exact replace, one step), Eraser and right-click erase, Eyedropper and Alt+click; verify manually and with the document tests from 3.2
+- [x] 6.3 Wire Fill, Line and Rectangle (outline/filled toggle, preview while dragging, Shift constraints, Esc cancels, commit on release); verify the image is unchanged until release and each is one undo step
+- [x] 6.4 Wire Select (marquee, move, Alt-drag copy, Ctrl+C/V, Del, Esc, deselect on outside click); verify moving off-canvas clips and a move is one undo step
 - [ ] 6.5 Wire Flip and Rotate buttons to the selection or whole canvas; verify canvas rotation swaps size and undo restores it
 - [ ] 6.6 Add the New dialog and Resize dialog (width, height, 3x3 anchor picker, validation messages); verify invalid sizes are rejected with a message and a resize is one undo step that clears the selection
 - [ ] 6.7 Add keyboard shortcuts (P, E, I, G, L, R, S, X, Y, [, ], Ctrl+Z/Y/Shift+Z, Ctrl+C/V, Ctrl+S, Ctrl+O, Ctrl+N) ignored while a text field or dialog has focus; verify typing in the resize width field does not switch tools

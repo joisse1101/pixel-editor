@@ -240,8 +240,31 @@ $<HTMLInputElement>('grid').addEventListener('change', (e) => {
 $<HTMLInputElement>('filled').addEventListener('change', (e) => {
   tools.filled = (e.target as HTMLInputElement).checked;
 });
+const typing = (t: EventTarget | null): boolean => t instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
+
+/** Image-space rectangle currently on screen. */
+function visibleRect() {
+  const canvas = $('px-canvas');
+  const a = view.viewport.toImage(0, 0);
+  const b = view.viewport.toImage(canvas.clientWidth, canvas.clientHeight);
+  return { x: Math.floor(a.x), y: Math.floor(a.y), w: Math.ceil(b.x) - Math.floor(a.x), h: Math.ceil(b.y) - Math.floor(a.y) };
+}
+
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') tools.cancelDrag();
+  if (typing(e.target)) return;
+  const mod = e.ctrlKey || e.metaKey;
+  if (e.key === 'Escape') {
+    if (!tools.cancelDrag()) doc.cancel();
+  } else if (mod && e.key.toLowerCase() === 'c') {
+    e.preventDefault();
+    if (tools.copy()) message('Copied');
+  } else if (mod && e.key.toLowerCase() === 'v') {
+    e.preventDefault();
+    if (tools.paste(visibleRect())) setTool('select');
+  } else if (!mod && (e.key === 'Delete' || e.key === 'Backspace')) {
+    e.preventDefault();
+    doc.deleteSelection();
+  }
 });
 $('px-canvas').addEventListener('wheel', () => requestAnimationFrame(refreshStatus), { passive: true });
 

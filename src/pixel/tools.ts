@@ -1,6 +1,6 @@
 import type { ColorState } from './colors';
 import { TRANSPARENT, type PixelDocument } from './document';
-import { constrainLine, constrainSquare, getPixel, inBounds, line, rectFill, rectOutline, type Point, type Rgba } from './ops';
+import { constrainLine, constrainSquare, getPixel, inBounds, line, rectFill, rectOutline, type Point, type Rect, type Rgba } from './ops';
 import type { PixelPointerHandlers, PixelPreview } from './view';
 
 export type Tool = 'pencil' | 'eraser' | 'eyedropper' | 'fill' | 'line' | 'rect' | 'select';
@@ -23,7 +23,17 @@ const ERASE_PREVIEW: Rgba = [255, 90, 90, 80];
 
 type Drag =
   | { kind: 'stroke'; color: Rgba; last: Point }
-  | { kind: 'shape'; shape: 'line' | 'rect'; color: Rgba; erase: boolean; start: Point; end: Point };
+  | { kind: 'shape'; shape: 'line' | 'rect'; color: Rgba; erase: boolean; start: Point; end: Point }
+  | { kind: 'marquee'; start: Point; moved: boolean }
+  | { kind: 'move'; grab: Point };
+
+const within = (r: Rect, p: Point): boolean => p.x >= r.x && p.y >= r.y && p.x < r.x + r.w && p.y < r.y + r.h;
+const spanning = (a: Point, b: Point): Rect => ({
+  x: Math.min(a.x, b.x),
+  y: Math.min(a.y, b.y),
+  w: Math.abs(a.x - b.x) + 1,
+  h: Math.abs(a.y - b.y) + 1,
+});
 
 /** Turns pointer input into document edits for the drawing tools. */
 export class ToolController implements PixelPointerHandlers {
@@ -31,6 +41,7 @@ export class ToolController implements PixelPointerHandlers {
   /** Rectangle tool: filled rather than outline. */
   filled = false;
   private drag: Drag | null = null;
+  private copiedFrom: Rect | null = null;
 
   constructor(
     private doc: PixelDocument,
@@ -45,7 +56,11 @@ export class ToolController implements PixelPointerHandlers {
   }
 
   down(p: Point, e: ToolEvent): void {
-    if (this.drag || this.tool === 'select') return;
+    if (this.drag) return;
+    if (this.tool === 'select') {
+      this.downSelect(p, e);
+      return;
+    }
     const right = e.button === 2;
     if (e.button !== 0 && !right) return;
 
@@ -82,6 +97,16 @@ export class ToolController implements PixelPointerHandlers {
   move(p: Point, e: ToolEvent): void {
     const d = this.drag;
     if (!d) return;
+    if (d.kind === 'marquee') {
+      if (p.x === d.start.x && p.y === d.start.y && !d.moved) return;
+      d.moved = true;
+      this.doc.select(spanning(d.start, p));
+      return;
+    }
+    if (d.kind === 'move') {
+      this.doc.moveTo(p.x - d.grab.x, p.y - d.grab.y);
+      return;
+    }
     if (d.kind === 'stroke') {
       // Fill in every pixel between samples so fast drags leave no gaps.
       this.doc.paint(line(d.last.x, d.last.y, p.x, p.y), d.color);
@@ -96,6 +121,15 @@ export class ToolController implements PixelPointerHandlers {
     const d = this.drag;
     this.drag = null;
     if (!d) return;
+    if (d.kind === 'marquee') {
+      // A click that never dragged clears the selection.
+      if (!d.moved) this.doc.select(null);
+      return;
+    }
+    if (d.kind === 'move') {
+      this.doc.endMove();
+      return;
+    }
     if (d.kind === 'stroke') {
       this.doc.endStroke();
       return;
@@ -106,11 +140,48 @@ export class ToolController implements PixelPointerHandlers {
     this.view.redraw();
   }
 
-  /** Esc: abandons a shape being dragged. Returns true when there was one. */
+  private downSelect(p: Point, e: ToolEvent): void {
+    if (e.button !== 0) return;
+    const sel = this.doc.selection;
+    if (sel && within(sel, p) && this.doc.beginMove(e.altKey)) {
+      this.drag = { kind: 'move', grab: { x: p.x - sel.x, y: p.y - sel.y } };
+    } else {
+      this.drag = { kind: 'marquee', start: p, moved: false };
+    }
+    this.view.redraw();
+  }
+
+  /** Ctrl+C. Remembers where the pixels came from so a paste can go back there. */
+  copy(): boolean {
+    const from = this.doc.selection;
+    if (!this.doc.copySelection()) return false;
+    this.copiedFrom = from ? { ...from } : null;
+    return true;
+  }
+
+  /**
+   * Ctrl+V: floats the clipboard at its original position when that is in `visible`, else at the
+   * top-left of `visible`. Returns false when nothing was copied.
+   */
+  paste(visible: Rect): boolean {
+    const clip = this.doc.clipboard;
+    if (!clip) return false;
+    const o = this.copiedFrom;
+    const originVisible = o && o.x < visible.x + visible.w && o.x + o.w > visible.x && o.y < visible.y + visible.h && o.y + o.h > visible.y;
+    const at = originVisible ? { x: o.x, y: o.y } : { x: Math.max(0, visible.x), y: Math.max(0, visible.y) };
+    return this.doc.paste(at);
+  }
+
+  /** Esc: abandons the drag in progress (a shape, a move or a marquee). Returns true when there was one. */
   cancelDrag(): boolean {
     const d = this.drag;
-    if (d?.kind !== 'shape') return false;
+    if (!d || d.kind === 'stroke') return false;
     this.drag = null;
+    if (d.kind === 'move') {
+      this.doc.cancel();
+      return true;
+    }
+    if (d.kind !== 'shape') return true;
     this.view.preview = null;
     this.view.redraw();
     return true;

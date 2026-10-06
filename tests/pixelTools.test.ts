@@ -224,6 +224,104 @@ describe('line and rectangle', () => {
   });
 });
 
+describe('select tool', () => {
+  const drag = (t: ToolController, a: [number, number], b: [number, number], e: ToolEvent = LEFT) => {
+    t.down(pt(...a), e);
+    t.move(pt(...b), e);
+    t.up();
+  };
+
+  it('drags a marquee, clipped to the canvas, with no history step', () => {
+    const { doc, tools } = setup(8, 8);
+    tools.tool = 'select';
+    drag(tools, [2, 2], [20, 4]);
+    expect(doc.selection).toEqual({ x: 2, y: 2, w: 6, h: 3 });
+    expect(doc.history.canUndo).toBe(false);
+  });
+
+  it('clears the selection on a click outside it, or Esc', () => {
+    const { doc, tools } = setup(8, 8);
+    tools.tool = 'select';
+    drag(tools, [1, 1], [3, 3]);
+    tools.down(pt(6, 6), LEFT);
+    tools.up();
+    expect(doc.selection).toBeNull();
+    drag(tools, [1, 1], [3, 3]);
+    expect(tools.cancelDrag()).toBe(false);
+    doc.cancel();
+    expect(doc.selection).toBeNull();
+  });
+
+  it('moves the selection as one undo step, clipping what leaves the canvas', () => {
+    const { doc, tools, at } = setup(8, 8);
+    doc.commitShape([pt(1, 1), pt(2, 1)], B);
+    tools.tool = 'select';
+    drag(tools, [1, 1], [2, 1]);
+    drag(tools, [1, 1], [7, 3]); // grab at (1,1): offset (6,2)
+    expect(at(1, 1)).toEqual(T);
+    expect(at(7, 3)).toEqual(B);
+    expect(doc.selection).toEqual({ x: 7, y: 3, w: 1, h: 1 }); // (8,3) is off the canvas
+    expect(doc.undo()).toBe(true);
+    expect(at(1, 1)).toEqual(B);
+    expect(at(2, 1)).toEqual(B);
+    expect(at(7, 3)).toEqual(T);
+  });
+
+  it('Alt-drag moves a copy and leaves the original', () => {
+    const { doc, tools, at } = setup(8, 8);
+    doc.commitShape([pt(1, 1)], B);
+    tools.tool = 'select';
+    doc.select({ x: 1, y: 1, w: 1, h: 1 });
+    drag(tools, [1, 1], [4, 4], { ...LEFT, altKey: true });
+    expect(at(1, 1)).toEqual(B);
+    expect(at(4, 4)).toEqual(B);
+  });
+
+  it('Esc during a move puts everything back', () => {
+    const { doc, tools, at } = setup(8, 8);
+    doc.commitShape([pt(1, 1)], B);
+    tools.tool = 'select';
+    doc.select({ x: 1, y: 1, w: 1, h: 1 });
+    tools.down(pt(1, 1), LEFT);
+    tools.move(pt(5, 5), LEFT);
+    expect(tools.cancelDrag()).toBe(true);
+    expect(at(1, 1)).toEqual(B);
+    expect(at(5, 5)).toEqual(T);
+  });
+
+  it('copies and pastes at the original position when visible, else the visible top-left', () => {
+    const { doc, tools, at } = setup(16, 16);
+    doc.commitShape([pt(10, 10)], B);
+    tools.tool = 'select';
+    doc.select({ x: 10, y: 10, w: 1, h: 1 });
+    expect(tools.copy()).toBe(true);
+    expect(tools.paste({ x: 0, y: 0, w: 16, h: 16 })).toBe(true);
+    expect(doc.selection).toEqual({ x: 10, y: 10, w: 1, h: 1 });
+    tools.paste({ x: 2, y: 3, w: 4, h: 4 }); // original not visible
+    expect(doc.selection).toEqual({ x: 2, y: 3, w: 1, h: 1 });
+    // drag the pasted pixels, then drop: the paste lands where it was released
+    tools.down(pt(2, 3), LEFT);
+    tools.move(pt(3, 3), LEFT);
+    tools.up();
+    expect(at(3, 3)).toEqual(T); // still floating until something else happens
+    doc.select(null);
+    expect(at(3, 3)).toEqual(B);
+  });
+
+  it('paste with nothing copied does nothing; Delete clears as one step', () => {
+    const { doc, tools, at } = setup(8, 8);
+    expect(tools.paste({ x: 0, y: 0, w: 8, h: 8 })).toBe(false);
+    doc.commitShape([pt(1, 1), pt(2, 2)], B);
+    doc.select({ x: 0, y: 0, w: 2, h: 2 });
+    doc.deleteSelection();
+    expect(at(1, 1)).toEqual(T);
+    expect(at(2, 2)).toEqual(B);
+    expect(doc.selection).not.toBeNull();
+    doc.undo();
+    expect(at(1, 1)).toEqual(B);
+  });
+});
+
 describe('recent colours', () => {
   it('records red, blue, red as red then blue', () => {
     const { colors, tools } = setup();
