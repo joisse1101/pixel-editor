@@ -1,5 +1,6 @@
 import { getMapBounds } from '../model/office';
-import { cellKey, parseCellKey, type Layer, type PlacedTile, type Project } from '../model/types';
+import { pngSizeFromDataUrl } from '../model/png';
+import { cellKey, parseCellKey, type Attribute, type Layer, type PlacedTile, type Project, type SpriteSheet } from '../model/types';
 import { applyOrientOp, type OrientOp, type Orientation } from './orientation';
 
 /** What the paint tool places: a sheet tile plus its orientation. */
@@ -203,6 +204,69 @@ export class Editor {
     }
     this.structureChanged();
     return removed;
+  }
+
+  /** Adds a PNG (data URL) as a new sheet. `partial` is true when edge pixels don't fill a whole tile. */
+  addSheet(dataUrl: string): { sheet: SpriteSheet; partial: boolean } {
+    const { width, height } = pngSizeFromDataUrl(dataUrl);
+    const ts = this.project.tileSize;
+    if (width < ts || height < ts) throw new Error(`Image is smaller than one ${ts}x${ts} tile`);
+    const sheet: SpriteSheet = { id: crypto.randomUUID(), dataUrl, width, height, attributes: {}, extra: {} };
+    this.project.sheets.push(sheet);
+    this.structureChanged();
+    return { sheet, partial: width % ts !== 0 || height % ts !== 0 };
+  }
+
+  /** Number of placed tiles that use the sheet. */
+  sheetUsage(sheetId: string): number {
+    let n = 0;
+    for (const l of this.project.layers) for (const t of l.cells.values()) if (t.sheetId === sheetId) n++;
+    return n;
+  }
+
+  /** Removes an unused sheet. Returns the usage count instead when tiles still use it. */
+  deleteSheet(sheetId: string): { deleted: true } | { deleted: false; usage: number } {
+    const usage = this.sheetUsage(sheetId);
+    if (usage > 0) return { deleted: false, usage };
+    const i = this.project.sheets.findIndex((s) => s.id === sheetId);
+    if (i < 0) throw new Error(`Unknown sheet ${sheetId}`);
+    this.project.sheets.splice(i, 1);
+    this.structureChanged();
+    return { deleted: true };
+  }
+
+  private attrs(sheetId: string, tileId: string): Attribute[] {
+    const sheet = this.project.sheets.find((s) => s.id === sheetId);
+    if (!sheet) throw new Error(`Unknown sheet ${sheetId}`);
+    return (sheet.attributes[tileId] ??= []);
+  }
+
+  /** Adds a key/value attribute to a sheet tile; applies to every placement of that tile. */
+  addAttribute(sheetId: string, tileId: string, key: string, value: unknown): Attribute {
+    const attr: Attribute = { id: crypto.randomUUID(), key, value };
+    this.attrs(sheetId, tileId).push(attr);
+    this.structureChanged();
+    return attr;
+  }
+
+  updateAttribute(sheetId: string, tileId: string, attrId: string, key: string, value: unknown): void {
+    const attr = this.attrs(sheetId, tileId).find((a) => a.id === attrId);
+    if (!attr) throw new Error(`Unknown attribute ${attrId}`);
+    attr.key = key;
+    attr.value = value;
+    this.structureChanged();
+  }
+
+  removeAttribute(sheetId: string, tileId: string, attrId: string): void {
+    const list = this.attrs(sheetId, tileId);
+    const i = list.findIndex((a) => a.id === attrId);
+    if (i < 0) throw new Error(`Unknown attribute ${attrId}`);
+    list.splice(i, 1);
+    if (list.length === 0) {
+      const sheet = this.project.sheets.find((s) => s.id === sheetId)!;
+      delete sheet.attributes[tileId];
+    }
+    this.structureChanged();
   }
 
   canUndo(): boolean {

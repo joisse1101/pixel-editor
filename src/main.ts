@@ -60,6 +60,13 @@ app.innerHTML = `
       <div class="brush"><canvas id="brush" width="48" height="48"></canvas><span id="brush-info"></span></div>
       <h3>Tiles</h3>
       <div id="palette"></div>
+      <div class="group sheet-actions">
+        <button id="sheet-import" type="button" title="Add a PNG as a new sprite sheet">Import PNG</button>
+        <button id="sheet-delete" type="button" title="Delete the shown sheet (only if unused)">Delete sheet</button>
+        <input id="sheet-file" type="file" accept="image/png" hidden />
+      </div>
+      <h3>Tile attributes</h3>
+      <div id="attrs"></div>
     </aside>
   </div>
 `;
@@ -80,6 +87,7 @@ let activeLayer = 0;
 let tool: Tool = 'paint';
 let brush: Brush = { sheetId: '', id: '0', flipX: false, flipY: false, rotation: 0 };
 let fileName = '';
+let attrKey = '';
 let fileHandle: FileHandle | null = null;
 let pressed = false;
 let lastCell: [number, number] | null = null;
@@ -179,7 +187,65 @@ function refresh(): void {
   $('brush-info').textContent = `${brush.flipX ? 'flipX ' : ''}${brush.flipY ? 'flipY ' : ''}rot ${brush.rotation}`;
   drawBrushPreview();
   renderLayers();
+  renderAttrs();
   view.draw();
+}
+
+const parseValue = (text: string): unknown => (text === 'true' ? true : text === 'false' ? false : text);
+
+/** Attribute editor for the brush tile; attributes belong to the sheet tile, so they apply everywhere it is placed. */
+function renderAttrs(): void {
+  const box = $('attrs');
+  const key = `${brush.sheetId}:${brush.id}`;
+  const sheet = project?.sheets.find((s) => s.id === brush.sheetId);
+  // Skip rebuilding while a field in the editor is being typed in.
+  const typing = document.activeElement;
+  if (typing instanceof HTMLInputElement && box.contains(typing) && attrKey === key) return;
+  attrKey = key;
+  box.replaceChildren();
+  if (!editor || !sheet) return;
+  const ed = editor;
+  const title = document.createElement('p');
+  title.className = 'hint';
+  title.textContent = `Tile ${brush.id}`;
+  box.append(title);
+  for (const attr of sheet.attributes[brush.id] ?? []) {
+    const row = document.createElement('div');
+    row.className = 'attr-row';
+    const k = document.createElement('input');
+    k.value = attr.key;
+    k.placeholder = 'key';
+    const v = document.createElement('input');
+    v.value = String(attr.value);
+    v.placeholder = 'value';
+    const save = () => {
+      if (!k.value.trim()) return;
+      ed.updateAttribute(sheet.id, brush.id, attr.id, k.value.trim(), parseValue(v.value));
+      updateTitle();
+    };
+    k.addEventListener('change', save);
+    v.addEventListener('change', save);
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'icon';
+    del.title = 'Remove attribute';
+    del.textContent = '×';
+    del.addEventListener('click', () => {
+      ed.removeAttribute(sheet.id, brush.id, attr.id);
+      refresh();
+    });
+    row.append(k, v, del);
+    box.append(row);
+  }
+  const add = document.createElement('button');
+  add.type = 'button';
+  add.textContent = 'Add attribute';
+  add.addEventListener('click', () => {
+    ed.addAttribute(sheet.id, brush.id, 'interaction', '');
+    refresh();
+    box.querySelector<HTMLInputElement>('.attr-row:last-of-type input')?.focus();
+  });
+  box.append(add);
 }
 
 function renderLayers(): void {
@@ -385,6 +451,51 @@ $('map-size').addEventListener('click', () => {
   status.classList.remove('error');
   status.textContent = `Map resized to ${w}x${h}${drop ? `, ${drop} tiles removed` : ''}`;
   view.fit();
+  refresh();
+});
+$('sheet-import').addEventListener('click', () => $('sheet-file').click());
+$('sheet-file').addEventListener('change', async (e) => {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file || !editor || !project) return;
+  try {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(file);
+    });
+    const { sheet, partial } = editor.addSheet(dataUrl);
+    await decodeSheets(project);
+    palette.reload(project.sheets.length - 1);
+    status.classList.remove('error');
+    status.textContent = `Imported ${file.name} as sheet ${project.sheets.length} (${Math.floor(sheet.width / project.tileSize)}x${Math.floor(sheet.height / project.tileSize)} tiles)`;
+    if (partial) {
+      alert(`${file.name} is ${sheet.width}x${sheet.height}, not a multiple of ${project.tileSize}. Partial tiles at the right and bottom edges are ignored.`);
+    }
+    refresh();
+  } catch (err) {
+    reportError('Import failed', err);
+  }
+});
+$('sheet-delete').addEventListener('click', () => {
+  if (!editor || !project) return;
+  const id = palette.currentSheetId();
+  if (!id) return;
+  const index = project.sheets.findIndex((s) => s.id === id);
+  const result = editor.deleteSheet(id);
+  if (!result.deleted) {
+    reportError('Cannot delete sheet', new Error(`${result.usage} placed tiles use sheet ${index + 1}. Erase them first.`));
+    return;
+  }
+  status.classList.remove('error');
+  status.textContent = `Deleted sheet ${index + 1}`;
+  if (brush.sheetId === id) {
+    brush = { ...brush, sheetId: project.sheets[0]?.id ?? '', id: '0' };
+  }
+  palette.reload(Math.min(index, project.sheets.length - 1));
+  palette.setSelected({ sheetId: brush.sheetId, id: brush.id });
   refresh();
 });
 $('layer-up').addEventListener('click', () => moveActiveLayer(-1));

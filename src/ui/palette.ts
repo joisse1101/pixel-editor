@@ -30,6 +30,22 @@ export class Palette {
     this.project = project;
     this.sheetIndex = 0;
     this.selected = null;
+    this.rebuild();
+  }
+
+  /** Re-reads the sheet list after sheets were added or removed, showing the sheet at `index`. */
+  reload(index: number): void {
+    if (!this.project) return;
+    this.sheetIndex = Math.max(0, Math.min(index, this.project.sheets.length - 1));
+    this.rebuild();
+  }
+
+  currentSheetId(): string | null {
+    return this.project?.sheets[this.sheetIndex]?.id ?? null;
+  }
+
+  private rebuild(): void {
+    const project = this.project!;
     this.select.replaceChildren(
       ...project.sheets.map((s, i) => {
         const o = document.createElement('option');
@@ -38,6 +54,7 @@ export class Palette {
         return o;
       }),
     );
+    this.select.value = String(this.sheetIndex);
     this.render();
   }
 

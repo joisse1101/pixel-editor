@@ -171,6 +171,27 @@ button.icon.on {
   color: #1e1e24;
 }
 
+.sheet-actions {
+  margin: 8px 0;
+}
+
+.attr-row {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.attr-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid #55556a;
+  border-radius: 4px;
+  background: #1e1e24;
+  color: inherit;
+  font: inherit;
+}
+
 .hint {
   margin: 8px 0 0;
   font-size: 11px;

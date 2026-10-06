@@ -23,7 +23,7 @@
 - [x] 4.2 Implement eraser on the active layer only and verify tiles on other layers remain (unit test)
 - [x] 4.3 Implement flip H/V and rotate controls for the brush and for placed tiles, with keyboard shortcuts; verify stored `scaleX/scaleY/rotation` values (unit test)
 - [x] 4.4 Implement undo/redo with per-stroke diffs and verify a multi-cell stroke reverts in one step (unit test)
-- [ ] 4.5 Implement map resize (grow/shrink) with confirmation when tiles would be dropped; verify tiles outside the bounds are removed only after confirmation and `mapSize` is saved
+- [x] 4.5 Implement map resize (grow/shrink) with confirmation when tiles would be dropped; verify tiles outside the bounds are removed only after confirmation and `mapSize` is saved
 
 ## 5. Layers (layer-management)
 

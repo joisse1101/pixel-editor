@@ -225,3 +225,67 @@ describe('layer management', () => {
     expect(e.undo()).toBe(false);
   });
 });
+
+function pngDataUrl(width: number, height: number): string {
+  const b = Buffer.alloc(33);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(b, 0);
+  b.writeUInt32BE(13, 8);
+  b.write('IHDR', 12, 'ascii');
+  b.writeUInt32BE(width, 16);
+  b.writeUInt32BE(height, 20);
+  return `data:image/png;base64,${b.toString('base64')}`;
+}
+
+describe('sprite sheets', () => {
+  it('imports a 64x32 PNG as a new sheet and writes it into the saved file', () => {
+    const e = new Editor(sample());
+    const url = pngDataUrl(64, 32);
+    const { sheet, partial } = e.addSheet(url);
+    expect(partial).toBe(false);
+    expect([sheet.width / 16, sheet.height / 16]).toEqual([4, 2]);
+    expect((sheet.width / 16) * (sheet.height / 16)).toBe(8);
+    const saved: any = JSON.parse(JSON.stringify(serializeOfficeJson(e.project)));
+    expect(saved.spriteSheets[sheet.id].base64).toBe(url);
+    expect(parseOfficeJson(saved).sheets).toHaveLength(17);
+    expect(e.dirty).toBe(true);
+  });
+
+  it('flags partial tiles and rejects images smaller than a tile', () => {
+    const e = new Editor(sample());
+    expect(e.addSheet(pngDataUrl(70, 40)).partial).toBe(true);
+    expect(() => e.addSheet(pngDataUrl(8, 32))).toThrow();
+    expect(() => e.addSheet('data:image/jpeg;base64,AAAA')).toThrow();
+  });
+
+  it('refuses to delete a sheet with placed tiles and reports the count, allows unused ones', () => {
+    const e = new Editor(sample());
+    const used = e.project.sheets.find((s) => e.sheetUsage(s.id) > 0)!;
+    const count = e.sheetUsage(used.id);
+    expect(count).toBeGreaterThan(0);
+    expect(e.deleteSheet(used.id)).toEqual({ deleted: false, usage: count });
+    expect(e.project.sheets).toContain(used);
+    const { sheet } = e.addSheet(pngDataUrl(32, 32));
+    expect(e.deleteSheet(sheet.id)).toEqual({ deleted: true });
+    expect(e.project.sheets).not.toContain(sheet);
+  });
+});
+
+describe('tile attributes', () => {
+  it('adds, edits and removes attributes and round-trips them through Office.json', () => {
+    const e = new Editor(sample());
+    const sheet = e.project.sheets[0];
+    const a = e.addAttribute(sheet.id, '5', 'interaction', 'door');
+    expect(a.id).toMatch(/^[0-9a-f-]{36}$/);
+    let saved: any = JSON.parse(JSON.stringify(serializeOfficeJson(e.project)));
+    expect(saved.spriteSheets[sheet.id].attributes['5']).toEqual([{ id: a.id, key: 'interaction', value: 'door' }]);
+    expect(parseOfficeJson(saved).sheets[0].attributes['5'][0].value).toBe('door');
+
+    e.updateAttribute(sheet.id, '5', a.id, 'interaction', 'water');
+    saved = JSON.parse(JSON.stringify(serializeOfficeJson(e.project)));
+    expect(saved.spriteSheets[sheet.id].attributes['5'][0].value).toBe('water');
+
+    e.removeAttribute(sheet.id, '5', a.id);
+    saved = JSON.parse(JSON.stringify(serializeOfficeJson(e.project)));
+    expect(saved.spriteSheets[sheet.id].attributes).not.toHaveProperty('5');
+  });
+});
