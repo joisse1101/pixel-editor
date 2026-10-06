@@ -5,7 +5,7 @@
 
 ## 2. Layer model and history
 
-- [ ] 2.1 Rework `History` (`src/pixel/history.ts`) so diff steps record their layer and snapshots cover the whole `{ layers, activeIndex }` state; verify existing `pixelHistory.test.ts` still passes and new cases cover undo/redo of a diff on a non-active layer (re-activates it) and of a structure snapshot interleaved with diffs
+- [x] 2.1 Rework `History` (`src/pixel/history.ts`) so diff steps record their layer and snapshots cover the whole `{ layers, activeIndex }` state; verify existing `pixelHistory.test.ts` still passes and new cases cover undo/redo of a diff on a non-active layer (re-activates it) and of a structure snapshot interleaved with diffs
 - [x] 2.2 Introduce `Layer` and the layer list in `PixelDocument` with `px` as the active layer's pixels, `setActive` (commits floating, keeps selection and clipboard), and one transparent layer on creation; verify existing `pixelDocument.test.ts` passes unchanged and new tests cover `setActive` with a floating paste
 - [x] 2.3 Implement add (above active), delete (nearest becomes active, never the last layer), rename, move up/down and duplicate (" copy", directly above, active, independent pixels) as single undoable steps; verify with document tests including undo/redo of each
 - [x] 2.4 Add `setVisible` (not an undo step, does not mark dirty); verify with a test that `isDirty` and `canUndo` are unchanged by toggling
@@ -32,4 +32,4 @@
 ## 6. Verification
 
 - [x] 6.1 Run `npm test` and the type check/build (`npm run build`) and verify both are clean
-- [ ] 6.2 Walk through the comparison flow in the running app (import several PNGs, toggle visibility, copy a selection from one layer to another, duplicate a layer, drag-resize the canvas, undo each, save and reopen the flattened PNG) and verify each matches the specs
+- [x] 6.2 Walk through the comparison flow in the running app (import several PNGs, toggle visibility, copy a selection from one layer to another, duplicate a layer, drag-resize the canvas, undo each, save and reopen the flattened PNG) and verify each matches the specs
