@@ -3,6 +3,7 @@ import { mountNav } from '../ui/nav';
 import { ColorState, toHex } from './colors';
 import { PixelDocument } from './document';
 import { decodeImageFile, encodeImageFile } from './pngFile';
+import { askSize } from './sizeDialog';
 import { ToolController, type Tool } from './tools';
 import { PixelView } from './view';
 import '../style.css';
@@ -23,7 +24,7 @@ app.insertAdjacentHTML(
   'beforeend',
   `
   <header class="toolbar">
-    <button id="new-btn" type="button" title="New image (Ctrl+N)" disabled>New</button>
+    <button id="new-btn" type="button" title="New image (Ctrl+N)">New</button>
     <button id="open-btn" type="button" title="Open PNG (Ctrl+O)">Open</button>
     <input id="open-file" type="file" accept="image/png,image/*" hidden />
     <span class="group">
@@ -40,7 +41,7 @@ app.insertAdjacentHTML(
       <button id="rot-ccw" type="button" title="Rotate counter-clockwise">&#8634;</button>
       <button id="rot-cw" type="button" title="Rotate clockwise">&#8635;</button>
     </span>
-    <button id="resize" type="button" title="Resize canvas" disabled>Resize</button>
+    <button id="resize" type="button" title="Resize canvas">Resize</button>
     <label><input id="grid" type="checkbox" checked /> Grid</label>
     <button id="fit" type="button" title="Fit image in view">Fit</button>
   </header>
@@ -229,6 +230,28 @@ $('save').addEventListener('click', () => void saveImage(false));
 $('save-as').addEventListener('click', () => void saveImage(true));
 $('undo').addEventListener('click', () => doc.undo());
 $('redo').addEventListener('click', () => doc.redo());
+async function newImage(): Promise<void> {
+  if (!confirmDiscard()) return;
+  const r = await askSize({ title: 'New image', width: doc.width, height: doc.height, anchor: false, confirm: 'Create' });
+  if (!r) return;
+  doc.newImage(r.width, r.height);
+  handle = null;
+  fileName = 'untitled.png';
+  view.fit();
+  refreshStatus();
+  message('');
+}
+
+async function resizeCanvas(): Promise<void> {
+  const r = await askSize({ title: 'Resize canvas', width: doc.width, height: doc.height, anchor: true, confirm: 'Resize' });
+  if (!r) return;
+  doc.resize(r.width, r.height, r.anchor);
+  view.fit();
+  refreshStatus();
+}
+
+$('new-btn').addEventListener('click', () => void newImage());
+$('resize').addEventListener('click', () => void resizeCanvas());
 $('flip-h').addEventListener('click', () => doc.flip('h'));
 $('flip-v').addEventListener('click', () => doc.flip('v'));
 for (const [id, dir] of [['rot-ccw', 'ccw'], ['rot-cw', 'cw']] as const) {
@@ -249,7 +272,7 @@ $<HTMLInputElement>('grid').addEventListener('change', (e) => {
 $<HTMLInputElement>('filled').addEventListener('change', (e) => {
   tools.filled = (e.target as HTMLInputElement).checked;
 });
-const typing = (t: EventTarget | null): boolean => t instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
+const typing = (t: EventTarget | null): boolean => t instanceof HTMLElement && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.closest('dialog') !== null);
 
 /** Image-space rectangle currently on screen. */
 function visibleRect() {
