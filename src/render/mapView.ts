@@ -1,6 +1,7 @@
 import { SHEET_COLUMNS, type Bake } from '../model/bake';
 import { getMapBounds, type MapBounds } from '../model/office';
-import { parseCellKey, type PlacedTile, type Project } from '../model/types';
+import type { Rect } from '../editor/editor';
+import { parseCellKey, type Block, type PlacedTile, type Project } from '../model/types';
 
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 32;
@@ -33,7 +34,8 @@ export function drawTile(ctx: CanvasRenderingContext2D, project: Project, tile: 
 }
 
 export interface PointerHandlers {
-  /** Cell is in absolute coordinates; the grid is infinite so it is only null when no project is loaded. */
+  /** Called for left and right presses; read `e.button`, `e.shiftKey` and `e.altKey`. Cell is in absolute
+   * coordinates; the grid is infinite so it is only null when no project is loaded. */
   down(cell: [number, number] | null, e: PointerEvent): void;
   move(cell: [number, number] | null, e: PointerEvent): void;
   up(e: PointerEvent): void;
@@ -43,10 +45,14 @@ export interface PointerHandlers {
 export class MapView {
   project: Project | null = null;
   showGrid = true;
-  /** Cell under the pointer, shown with a ghost of the brush tile when set. */
+  /** Cell under the pointer. */
   hoverCell: [number, number] | null = null;
-  ghost: PlacedTile | null = null;
-  selectedCell: [number, number] | null = null;
+  /** A block drawn translucent: at `at`, or with its top-left at the hover cell when `at` is null. */
+  ghost: { block: Block; at: [number, number] | null } | null = null;
+  /** Yellow outline of the selection (or the marquee being drawn). */
+  selection: Rect | null = null;
+  /** Extra outline for a live rectangle fill or delete. */
+  outline: { rect: Rect; color: string } | null = null;
   handlers: PointerHandlers | null = null;
   spaceHeld = false;
   private preview: Preview | null = null;
@@ -55,6 +61,7 @@ export class MapView {
   private panY = 0;
   private panning = false;
   private tooling = false;
+  private toolButton = 0;
   private lastX = 0;
   private lastY = 0;
 
@@ -77,7 +84,9 @@ export class MapView {
     this.project = project;
     this.preview = null;
     this.hoverCell = null;
-    this.selectedCell = null;
+    this.selection = null;
+    this.outline = null;
+    this.ghost = null;
     this.fit();
   }
 
@@ -162,13 +171,15 @@ export class MapView {
     this.canvas.setPointerCapture(e.pointerId);
     this.lastX = e.clientX;
     this.lastY = e.clientY;
-    // Middle/right button, or Space + left button, pans; plain left button goes to the tool.
-    if (e.button === 1 || e.button === 2 || this.spaceHeld) {
+    // Middle button, or Space + left button, pans; left and right buttons go to the handlers.
+    if (e.button === 1 || (e.button === 0 && this.spaceHeld)) {
+      e.preventDefault();
       this.panning = true;
       return;
     }
-    if (e.button === 0 && this.handlers && !this.preview) {
+    if ((e.button === 0 || e.button === 2) && this.handlers && !this.preview) {
       this.tooling = true;
+      this.toolButton = e.button;
       this.handlers.down(this.cellAt(e.clientX, e.clientY), e);
     }
   }
@@ -190,8 +201,8 @@ export class MapView {
   }
 
   private onPointerUp(e: PointerEvent): void {
-    this.panning = false;
-    if (this.tooling) {
+    if (e.button === 1 || this.panning) this.panning = false;
+    if (this.tooling && e.button === this.toolButton) {
       this.tooling = false;
       this.handlers?.up(e);
     }
@@ -230,11 +241,19 @@ export class MapView {
         ctx.restore();
       }
     }
-    if (this.hoverCell && this.ghost) {
+    const at = this.ghost?.at ?? this.hoverCell;
+    if (this.ghost && at) {
       ctx.save();
       ctx.globalAlpha = 0.65;
-      ctx.translate(this.hoverCell[0] * ts, this.hoverCell[1] * ts);
-      drawTile(ctx, project, this.ghost);
+      for (const c of this.ghost.block.cells) {
+        const gx = at[0] + c.dx;
+        const gy = at[1] + c.dy;
+        if (gx < x0 || gx > x1 || gy < y0 || gy > y1) continue;
+        ctx.save();
+        ctx.translate(gx * ts, gy * ts);
+        drawTile(ctx, project, c.tile);
+        ctx.restore();
+      }
       ctx.restore();
     }
 
@@ -253,13 +272,17 @@ export class MapView {
       ctx.stroke();
     }
 
-    const outline = (cell: [number, number], color: string) => {
+    const outline = (r: Rect, color: string) => {
       ctx.strokeStyle = color;
       ctx.lineWidth = 2 / (dpr * this.zoom);
-      ctx.strokeRect(cell[0] * ts, cell[1] * ts, ts, ts);
+      ctx.strokeRect(r.x0 * ts, r.y0 * ts, (r.x1 - r.x0 + 1) * ts, (r.y1 - r.y0 + 1) * ts);
     };
-    if (this.hoverCell) outline(this.hoverCell, 'rgba(255,255,255,0.9)');
-    if (this.selectedCell) outline(this.selectedCell, '#ffd54a');
+    if (this.hoverCell) {
+      const [hx, hy] = this.hoverCell;
+      outline({ x0: hx, y0: hy, x1: hx, y1: hy }, 'rgba(255,255,255,0.9)');
+    }
+    if (this.selection) outline(this.selection, '#ffd54a');
+    if (this.outline) outline(this.outline.rect, this.outline.color);
   }
 
   /** Draws the baked layers bottom to top from the packed spritesheet, with a white box around the exported extent. */

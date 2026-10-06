@@ -15,13 +15,22 @@ npm run build    # type check + production build
 ## Usage
 
 1. **Import**: *Open* an `Office.json` (try `office/Office.json`).
-2. **Edit**: pick a tile in the palette, then *Paint* (B) / *Erase* (E) on the canvas. One tile per cell
-   per layer. Flip H (X) / Flip V (Y) / rotate (R, Shift+R) apply to the brush, or to a placed tile in
-   *Select* (V) mode. Space or middle/right drag pans, wheel zooms. Ctrl+Z / Ctrl+Y undo and redo.
+2. **Edit** (hover the `?` in the top bar for the full list of controls). One tile per cell per layer.
+   - Palette: drag to select a block of tiles as the brush; a click picks one tile.
+   - With a brush: click stamps, drag paints, Shift+drag fills a rectangle by repeating the pattern from
+     the start corner. Esc drops the brush.
+   - Without a brush: drag draws a selection, drag inside it moves it (Alt+drag copies), Ctrl+C / Ctrl+V
+     copy and paste (click to place), Del deletes it.
+   - Right-click or right-drag deletes; Shift+right-drag deletes a rectangle. There is no Erase tool.
+   - Layers: click sets the blue layer (the only one painted on) and clears yellow; right-click toggles a
+     layer yellow. Select, move, copy, paste and delete act on the visible blue and yellow layers; paste
+     returns tiles to their source layers.
+   - X / Y flip and R / Shift+R rotate the pending paste, the selection or the brush as a whole block.
+   - Pan with middle-drag, Space+drag or the wheel (the right button does not pan); Ctrl+Wheel zooms the
+     palette. Ctrl+Z / Ctrl+Y undo and redo; every gesture is one step.
    - Layers: show/hide (eye), collider flag (C), add, rename, delete, reorder.
    - Tiles: *Import PNG* adds a sheet sliced by tile size; the attribute editor (e.g. `interaction=water`)
-     edits the selected palette tile; unused sheets can be deleted.
-   - *Map size* resizes the map (confirms before dropping tiles).
+     edits a single selected palette tile; unused sheets can be deleted.
 3. **Save**: *Save* writes `Office.json` (overwrites the opened file in Chrome/Edge, downloads elsewhere).
    The cached `exports` inside the file is regenerated on every save.
 4. **Export**: *Export for Phaser* downloads `map.json` and `spritesheet.png`.

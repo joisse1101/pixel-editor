@@ -1,7 +1,28 @@
 import { pngSizeFromDataUrl } from '../model/png';
 import { isMapEmpty } from '../model/office';
-import { cellKey, type Attribute, type Layer, type PlacedTile, type Project, type SpriteSheet } from '../model/types';
+import { cellKey, parseCellKey, type Attribute, type Block, type Layer, type PlacedTile, type Project, type SpriteSheet } from '../model/types';
 import { applyOrientOp, type OrientOp, type Orientation } from './orientation';
+
+/** Inclusive cell rectangle with x0 <= x1 and y0 <= y1. */
+export interface Rect {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/** Normalises two corner cells into a rectangle. */
+export const rectOf = (ax: number, ay: number, bx: number, by: number): Rect => ({
+  x0: Math.min(ax, bx),
+  y0: Math.min(ay, by),
+  x1: Math.max(ax, bx),
+  y1: Math.max(ay, by),
+});
+
+const mod = (n: number, m: number) => ((n % m) + m) % m;
+
+/** Copies a tile so placements never share a mutable `extra` object. */
+const cloneTile = (t: PlacedTile): PlacedTile => ({ ...t, extra: { ...t.extra } });
 
 /** What the paint tool places: a sheet tile plus its orientation. */
 export interface Brush extends Orientation {
@@ -100,6 +121,81 @@ export class Editor {
   /** Removes the tile on the given layer only. */
   erase(layerIndex: number, cx: number, cy: number): boolean {
     return this.setCell(layerIndex, cx, cy, null);
+  }
+
+  /** Stamps a brush block with its top-left tile at (x, y) on one layer. The grid is unbounded. */
+  paintBlock(layerIndex: number, x: number, y: number, block: Block): void {
+    for (const c of block.cells) {
+      const existing = this.project.layers[layerIndex].cells.get(cellKey(x + c.dx, y + c.dy));
+      this.setCell(layerIndex, x + c.dx, y + c.dy, { ...c.tile, extra: existing?.extra ?? { ...c.tile.extra } });
+    }
+  }
+
+  /**
+   * Fills the rectangle spanned by the press cell and the current cell by repeating the block,
+   * anchored at the press cell, so dragging up or left still starts the pattern there.
+   */
+  fillRect(layerIndex: number, press: [number, number], current: [number, number], block: Block): void {
+    const r = rectOf(press[0], press[1], current[0], current[1]);
+    const byPos = new Map(block.cells.map((c) => [cellKey(c.dx, c.dy), c.tile]));
+    for (let y = r.y0; y <= r.y1; y++) {
+      for (let x = r.x0; x <= r.x1; x++) {
+        const tile = byPos.get(cellKey(mod(x - press[0], block.width), mod(y - press[1], block.height)));
+        if (!tile) continue;
+        const existing = this.project.layers[layerIndex].cells.get(cellKey(x, y));
+        this.setCell(layerIndex, x, y, { ...tile, extra: existing?.extra ?? { ...tile.extra } });
+      }
+    }
+  }
+
+  /** Removes every tile inside the rectangle on the listed layers only. */
+  deleteRect(layerIndexes: number[], r: Rect): void {
+    for (const li of layerIndexes) {
+      for (const key of [...this.project.layers[li].cells.keys()]) {
+        const [x, y] = parseCellKey(key);
+        if (x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1) this.setCell(li, x, y, null);
+      }
+    }
+  }
+
+  /** Reads the tiles in the rectangle on the listed layers into a block anchored at its top-left. */
+  captureBlock(layerIndexes: number[], r: Rect): Block {
+    const cells: Block['cells'] = [];
+    for (const li of layerIndexes) {
+      const layer = this.project.layers[li];
+      for (const [key, tile] of layer.cells) {
+        const [x, y] = parseCellKey(key);
+        if (x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1) {
+          cells.push({ dx: x - r.x0, dy: y - r.y0, layerId: layer.id, tile: cloneTile(tile) });
+        }
+      }
+    }
+    return { width: r.x1 - r.x0 + 1, height: r.y1 - r.y0 + 1, cells };
+  }
+
+  /**
+   * Moves (or copies) the tiles inside the rectangle by whole cells, on the layer each is on.
+   * All sources are read first, so overlapping source and target works. Moved tiles replace.
+   */
+  moveCells(layerIndexes: number[], r: Rect, dx: number, dy: number, copy: boolean): void {
+    if (dx === 0 && dy === 0) return;
+    const moving: { li: number; x: number; y: number; tile: PlacedTile }[] = [];
+    for (const li of layerIndexes) {
+      for (const [key, tile] of this.project.layers[li].cells) {
+        const [x, y] = parseCellKey(key);
+        if (x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1) moving.push({ li, x, y, tile });
+      }
+    }
+    if (!copy) for (const m of moving) this.setCell(m.li, m.x, m.y, null);
+    for (const m of moving) this.setCell(m.li, m.x + dx, m.y + dy, copy ? cloneTile(m.tile) : m.tile);
+  }
+
+  /** Places a captured block with its top-left at (x, y), each tile back on its source layer. */
+  pasteBlock(block: Block, x: number, y: number): void {
+    for (const c of block.cells) {
+      const li = this.project.layers.findIndex((l) => l.id === c.layerId);
+      if (li >= 0) this.setCell(li, x + c.dx, y + c.dy, cloneTile(c.tile));
+    }
   }
 
   /** Flips or rotates an already placed tile in place. */

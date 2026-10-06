@@ -1,9 +1,14 @@
 import { sheetLabel } from '../model/office';
 import type { Project } from '../model/types';
 
+/** A block of tiles picked from one sheet; `id` is the top-left tile's id. */
 export interface PaletteSelection {
   sheetId: string;
   id: string;
+  col: number;
+  row: number;
+  w: number;
+  h: number;
 }
 
 const VIEW = 320;
@@ -17,7 +22,8 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 
 /**
  * Shows the selected sprite sheet in a fixed-size, pannable and zoomable viewport and reports
- * the clicked tile. Left drag never pans; middle/right drag, Space + left drag and the wheel do.
+ * the picked block of tiles. Left drag selects a block (a click is one tile); middle drag,
+ * Space + left drag and the wheel pan. The right button does nothing.
  */
 export class Palette {
   private project: Project | null = null;
@@ -28,7 +34,7 @@ export class Palette {
   private panY = 0;
   private panSheetId: string | null = null;
   private spaceHeld = false;
-  private drag: { x: number; y: number; moved: boolean; panning: boolean } | null = null;
+  private drag: { x: number; y: number; moved: boolean; panning: boolean; start: [number, number] | null; end: [number, number] | null } | null = null;
   private select = document.createElement('select');
   private gear = document.createElement('button');
   private zoomOut = document.createElement('button');
@@ -36,7 +42,7 @@ export class Palette {
   private zoomLabel = document.createElement('span');
   private canvas = document.createElement('canvas');
 
-  /** Called when the gear button is pressed; only possible while a tile is selected. */
+  /** Called when the gear button is pressed; only possible while exactly one tile is selected. */
   onConfigure: (s: PaletteSelection) => void = () => {};
 
   constructor(
@@ -48,7 +54,7 @@ export class Palette {
     this.gear.type = 'button';
     this.gear.className = 'icon gear';
     this.gear.textContent = '⚙';
-    this.gear.title = 'Edit tile attributes (select a tile first)';
+    this.gear.title = 'Edit tile attributes (select a single tile first)';
     top.append(this.select, this.gear);
 
     const bar = document.createElement('div');
@@ -204,10 +210,11 @@ export class Palette {
   }
 
   private onDown(e: MouseEvent): void {
-    const panning = e.button === 1 || e.button === 2 || (e.button === 0 && this.spaceHeld);
+    const panning = e.button === 1 || (e.button === 0 && this.spaceHeld);
     if (!panning && e.button !== 0) return;
     if (panning) e.preventDefault();
-    this.drag = { x: e.clientX, y: e.clientY, moved: false, panning };
+    const start = panning ? null : this.tileAt(e, false);
+    this.drag = { x: e.clientX, y: e.clientY, moved: false, panning, start, end: start };
   }
 
   private onMove(e: MouseEvent): void {
@@ -216,7 +223,13 @@ export class Palette {
     const dx = e.clientX - d.x;
     const dy = e.clientY - d.y;
     if (Math.abs(dx) + Math.abs(dy) > DRAG_SLOP) d.moved = true;
-    if (!d.panning) return;
+    if (!d.panning) {
+      if (d.moved && d.start) {
+        d.end = this.tileAt(e, true);
+        this.render();
+      }
+      return;
+    }
     const rect = this.canvas.getBoundingClientRect();
     this.panX += dx * (VIEW / rect.width);
     this.panY += dy * (VIEW / rect.height);
@@ -228,23 +241,47 @@ export class Palette {
   private onUp(e: MouseEvent): void {
     const d = this.drag;
     this.drag = null;
-    if (!d || d.panning || e.button !== 0) return;
-    // A left press that ends over the canvas picks a tile; the sheet never moves.
-    if (e.target === this.canvas) this.pick(e);
+    if (!d || d.panning || e.button !== 0 || !d.start) {
+      this.render();
+      return;
+    }
+    // A press on a tile that ends over the canvas, or a drag that went anywhere, picks a block;
+    // the sheet never moves. The drag end is clamped to the sheet, so leaving it ends on the last tile.
+    if (d.moved || e.target === this.canvas) this.pick(d.start, d.moved ? this.tileAt(e, true) : d.start);
+    else this.render();
   }
 
-  private pick(e: MouseEvent): void {
+  /** Tile column and row under the pointer; null outside the sheet unless `clampToSheet`. */
+  private tileAt(e: MouseEvent, clampToSheet: boolean): [number, number] | null {
     const project = this.project;
     const sheet = this.sheet();
-    if (!project || !sheet) return;
+    if (!project || !sheet) return null;
     const ts = project.tileSize * this.scale();
     const [px, py] = this.point(e);
     const col = Math.floor((px - this.panX) / ts);
     const row = Math.floor((py - this.panY) / ts);
     const cols = Math.floor(sheet.width / project.tileSize);
     const rows = Math.floor(sheet.height / project.tileSize);
-    if (col < 0 || row < 0 || col >= cols || row >= rows) return;
-    const sel = { sheetId: sheet.id, id: String(row * cols + col) };
+    if (clampToSheet) return [clamp(col, 0, cols - 1), clamp(row, 0, rows - 1)];
+    if (col < 0 || row < 0 || col >= cols || row >= rows) return null;
+    return [col, row];
+  }
+
+  private pick(a: [number, number] | null, b: [number, number] | null): void {
+    const project = this.project;
+    const sheet = this.sheet();
+    if (!project || !sheet || !a || !b) return;
+    const cols = Math.floor(sheet.width / project.tileSize);
+    const col = Math.min(a[0], b[0]);
+    const row = Math.min(a[1], b[1]);
+    const sel: PaletteSelection = {
+      sheetId: sheet.id,
+      id: String(row * cols + col),
+      col,
+      row,
+      w: Math.abs(a[0] - b[0]) + 1,
+      h: Math.abs(a[1] - b[1]) + 1,
+    };
     this.selected = sel;
     this.render();
     this.onSelect(sel);
@@ -254,7 +291,7 @@ export class Palette {
     const project = this.project;
     const sheet = this.sheet();
     const ctx = this.canvas.getContext('2d')!;
-    this.gear.disabled = !this.selected;
+    this.gear.disabled = !this.selected || this.selected.w !== 1 || this.selected.h !== 1;
     this.zoomOut.disabled = this.zoomIn.disabled = !sheet;
     ctx.clearRect(0, 0, VIEW, VIEW);
     if (!project || !sheet) {
@@ -298,12 +335,23 @@ export class Palette {
       ctx.lineTo(Math.min(VIEW, this.panX + w), cy);
     }
     ctx.stroke();
-    if (this.selected && this.selected.sheetId === sheet.id) {
-      const cols = Math.floor(sheet.width / project.tileSize);
-      const i = Number(this.selected.id);
+    // The block being dragged, else the picked block.
+    const d = this.drag;
+    let hl: { col: number; row: number; w: number; h: number } | null = null;
+    if (d && !d.panning && d.moved && d.start && d.end) {
+      hl = {
+        col: Math.min(d.start[0], d.end[0]),
+        row: Math.min(d.start[1], d.end[1]),
+        w: Math.abs(d.start[0] - d.end[0]) + 1,
+        h: Math.abs(d.start[1] - d.end[1]) + 1,
+      };
+    } else if (this.selected && this.selected.sheetId === sheet.id) {
+      hl = this.selected;
+    }
+    if (hl) {
       ctx.strokeStyle = '#ffd54a';
       ctx.lineWidth = 2;
-      ctx.strokeRect(this.panX + (i % cols) * ts + 1, this.panY + Math.floor(i / cols) * ts + 1, ts - 2, ts - 2);
+      ctx.strokeRect(this.panX + hl.col * ts + 1, this.panY + hl.row * ts + 1, hl.w * ts - 2, hl.h * ts - 2);
     }
   }
 }

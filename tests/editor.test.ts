@@ -295,3 +295,138 @@ describe('sheet rename and reorder', () => {
     expect(e.addSheet(url).sheet.name).toBeUndefined();
   });
 });
+
+describe('block operations', () => {
+  const emptyEditor = (layers = 2) => {
+    const p = sample();
+    for (const l of p.layers) l.cells.clear();
+    p.layers.length = layers;
+    return new Editor(p);
+  };
+  const tile = (id: string) => ({
+    id,
+    sheetId: 's',
+    flipX: false,
+    flipY: false,
+    rotation: 0 as Rotation,
+    extra: {},
+  });
+  const block2x2 = (layerId?: string) => ({
+    width: 2,
+    height: 2,
+    cells: [0, 1, 2, 3].map((i) => ({ dx: i % 2, dy: Math.floor(i / 2), layerId, tile: tile(String(i)) })),
+  });
+  const id = (e: Editor, li: number, x: number, y: number) => e.project.layers[li].cells.get(cellKey(x, y))?.id;
+  const r = (x0: number, y0: number, x1: number, y1: number) => ({ x0, y0, x1, y1 });
+
+  it('paintBlock stamps a 2x2 block in its layout and replaces existing tiles', () => {
+    const e = emptyEditor();
+    e.stroke(() => e.paint(0, 6, 5, brush({ id: '9' })));
+    e.stroke(() => e.paintBlock(0, 5, 5, block2x2()));
+    expect([id(e, 0, 5, 5), id(e, 0, 6, 5), id(e, 0, 5, 6), id(e, 0, 6, 6)]).toEqual(['0', '1', '2', '3']);
+    expect(countTiles(e.project)).toBe(4);
+  });
+
+  it('fillRect tiles a 6x4 fill with a 2x2 block from the press cell', () => {
+    const e = emptyEditor();
+    e.stroke(() => e.fillRect(0, [0, 0], [5, 3], block2x2()));
+    expect(countTiles(e.project)).toBe(24);
+    expect(id(e, 0, 4, 2)).toBe('0');
+    expect(id(e, 0, 5, 3)).toBe('3');
+  });
+
+  it('fillRect clips a pattern in a 3x3 fill', () => {
+    const e = emptyEditor();
+    e.stroke(() => e.fillRect(0, [0, 0], [2, 2], block2x2()));
+    expect(countTiles(e.project)).toBe(9);
+    expect(id(e, 0, 2, 2)).toBe('0');
+    expect(id(e, 0, 3, 3)).toBeUndefined();
+  });
+
+  it('fillRect dragged up and left anchors the pattern at the press cell', () => {
+    const e = emptyEditor();
+    e.stroke(() => e.fillRect(0, [5, 5], [3, 3], block2x2()));
+    expect(id(e, 0, 5, 5)).toBe('0');
+    expect(id(e, 0, 4, 5)).toBe('1');
+    expect(id(e, 0, 5, 4)).toBe('2');
+    expect(id(e, 0, 4, 4)).toBe('3');
+  });
+
+  it('deleteRect skips layers that are not listed', () => {
+    const e = emptyEditor(3);
+    e.stroke(() => {
+      for (let li = 0; li < 3; li++) e.paint(li, 1, 1, brush());
+    });
+    e.stroke(() => e.deleteRect([0, 1], r(0, 0, 2, 2)));
+    expect([id(e, 0, 1, 1), id(e, 1, 1, 1), id(e, 2, 1, 1)]).toEqual([undefined, undefined, '3']);
+  });
+
+  it('moveCells moves, copies, handles overlap and keeps negative coordinates', () => {
+    const e = emptyEditor();
+    e.stroke(() => e.paintBlock(0, 0, 0, block2x2()));
+    e.stroke(() => e.moveCells([0], r(0, 0, 1, 1), 1, 0, false));
+    expect([id(e, 0, 0, 0), id(e, 0, 1, 0), id(e, 0, 2, 0), id(e, 0, 1, 1), id(e, 0, 2, 1)]).toEqual([
+      undefined,
+      '0',
+      '1',
+      '2',
+      '3',
+    ]);
+    e.stroke(() => e.moveCells([0], r(1, 0, 2, 1), 5, 0, true));
+    expect(countTiles(e.project)).toBe(8);
+    e.stroke(() => e.moveCells([0], r(1, 0, 2, 1), -4, -3, false));
+    expect(id(e, 0, -3, -3)).toBe('0');
+    expect(id(e, 0, -2, -2)).toBe('3');
+  });
+
+  it('moveCells replaces tiles at the target on that layer', () => {
+    const e = emptyEditor();
+    e.stroke(() => {
+      e.paint(0, 0, 0, brush({ id: '1' }));
+      e.paint(0, 3, 0, brush({ id: '2' }));
+    });
+    e.stroke(() => e.moveCells([0], r(0, 0, 0, 0), 3, 0, false));
+    expect(id(e, 0, 3, 0)).toBe('1');
+    expect(countTiles(e.project)).toBe(1);
+  });
+
+  it('pasteBlock routes tiles to their source layers and skips unknown layers', () => {
+    const e = emptyEditor();
+    const [a, b] = e.project.layers.map((l) => l.id);
+    const blk = {
+      width: 2,
+      height: 1,
+      cells: [
+        { dx: 0, dy: 0, layerId: a, tile: tile('1') },
+        { dx: 1, dy: 0, layerId: b, tile: tile('2') },
+        { dx: 1, dy: 0, layerId: 'gone', tile: tile('3') },
+      ],
+    };
+    e.stroke(() => e.pasteBlock(blk, 4, 4));
+    expect(id(e, 0, 4, 4)).toBe('1');
+    expect(id(e, 1, 5, 4)).toBe('2');
+    expect(countTiles(e.project)).toBe(2);
+  });
+
+  it('a multi-layer move, paste and fill each undo and redo as one step', () => {
+    const e = emptyEditor();
+    e.stroke(() => {
+      e.paint(0, 0, 0, brush());
+      e.paint(1, 1, 0, brush());
+    });
+    const base = countTiles(e.project);
+    const keys = () => e.project.layers.map((l) => [...l.cells.keys()].sort().join(';'));
+    const gesture = (fn: () => void) => {
+      e.stroke(fn);
+      const after = keys();
+      expect(e.undo()).toBe(true);
+      expect(countTiles(e.project)).toBe(base);
+      expect(e.redo()).toBe(true);
+      expect(keys()).toEqual(after);
+      e.undo();
+    };
+    gesture(() => e.moveCells([0, 1], r(0, 0, 1, 0), 0, 3, false));
+    gesture(() => e.pasteBlock(e.captureBlock([0, 1], r(0, 0, 1, 0)), 5, 5));
+    gesture(() => e.fillRect(0, [0, 5], [3, 7], block2x2()));
+  });
+});

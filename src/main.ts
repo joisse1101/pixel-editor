@@ -1,15 +1,14 @@
-import { Editor, type Brush } from './editor/editor';
-import { applyOrientOp, type OrientOp } from './editor/orientation';
+import { blockFromSheetRect, tiledBlock } from './editor/block';
+import { Editor, rectOf, type Rect } from './editor/editor';
+import { transformBlock, type OrientOp } from './editor/orientation';
 import { bakeExports, bakeFiles, bakeProject } from './model/bake';
 import { downloadBytes, downloadText, hasFileAccess, pickFile, saveText, type FileHandle } from './io/files';
 import { countTiles, createBlankProject, getMapBounds, isMapEmpty, serializeOfficeJson, sheetLabel, sheetNameFromFile, tileSizeImpact, tryLoadProject } from './model/office';
-import type { Project } from './model/types';
+import type { Block, Project } from './model/types';
 import { drawTile, MapView } from './render/mapView';
 import { decodeSheets } from './render/sheets';
 import { Palette, type PaletteSelection } from './ui/palette';
 import './style.css';
-
-type Tool = 'paint' | 'erase' | 'select';
 
 const app = document.getElementById('app')!;
 app.innerHTML = `
@@ -21,11 +20,6 @@ app.innerHTML = `
       <button id="save" type="button" title="Save Office.json (Ctrl+S)">Save</button>
       <button id="save-as" type="button" title="Save as... (Ctrl+Shift+S)">Save As</button>
       <button id="export" type="button" title="Download map.json and spritesheet.png for Phaser">Export for Phaser</button>
-    </span>
-    <span class="group">
-      <button id="tool-paint" type="button" title="Paint (B)">Paint</button>
-      <button id="tool-erase" type="button" title="Erase (E)">Erase</button>
-      <button id="tool-select" type="button" title="Select a placed tile to flip/rotate it (V)">Select</button>
     </span>
     <span class="group">
       <button id="flip-h" type="button" title="Flip horizontally (X)">Flip H</button>
@@ -44,6 +38,25 @@ app.innerHTML = `
     <span id="size"></span>
     <span id="zoom"></span>
     <span id="cell"></span>
+    <span id="help" class="help" tabindex="0" role="button" aria-label="Controls help">
+      ?
+      <div class="help-panel">
+        <h4>Palette</h4>
+        <p><kbd>Drag</kbd> select a block of tiles as the brush &middot; <kbd>Click</kbd> one tile &middot; <kbd>Wheel</kbd> / <kbd>Middle-drag</kbd> / <kbd>Space+drag</kbd> pan &middot; <kbd>Ctrl+Wheel</kbd> zoom</p>
+        <h4>Map with a brush</h4>
+        <p><kbd>Click</kbd> stamp &middot; <kbd>Drag</kbd> paint freehand &middot; <kbd>Shift+Drag</kbd> fill a rectangle with the pattern &middot; <kbd>Esc</kbd> drop the brush</p>
+        <h4>Map without a brush</h4>
+        <p><kbd>Drag</kbd> draw a selection &middot; <kbd>Drag inside it</kbd> move &middot; <kbd>Alt+Drag</kbd> copy &middot; <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> copy, paste (click to place) &middot; <kbd>Del</kbd> delete &middot; <kbd>Esc</kbd> clear</p>
+        <h4>Deleting</h4>
+        <p><kbd>Right-click</kbd> / <kbd>Right-drag</kbd> delete &middot; <kbd>Shift+Right-drag</kbd> delete a rectangle</p>
+        <h4>Layers</h4>
+        <p><kbd>Click</kbd> a layer: blue, paint here, clears yellow &middot; <kbd>Right-click</kbd> a layer: toggle yellow. Select, move, copy, paste and delete act on blue and yellow layers</p>
+        <h4>View</h4>
+        <p><kbd>Wheel</kbd> zoom &middot; <kbd>Middle-drag</kbd> or <kbd>Space+drag</kbd> pan &middot; the right button does not pan</p>
+        <h4>Keys</h4>
+        <p><kbd>X</kbd> / <kbd>Y</kbd> flip &middot; <kbd>R</kbd> / <kbd>Shift+R</kbd> rotate (paste, selection or brush) &middot; <kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd> undo, redo &middot; <kbd>Ctrl+S</kbd> save</p>
+      </div>
+    </span>
   </header>
   <div class="status-row"><span id="status"></span></div>
   <div class="main">
@@ -57,7 +70,7 @@ app.innerHTML = `
         <button id="layer-delete" type="button" title="Delete layer">Delete</button>
       </div>
       <ul id="layers"></ul>
-      <p class="hint">Eye = show/hide (saved in Office.json, not exported to Phaser). C = collider.</p>
+      <p class="hint">Click = blue (paint here). Right-click = toggle yellow (also selected, moved, deleted). Eye = show/hide (saved in Office.json, not exported to Phaser). C = collider.</p>
     </aside>
     <canvas id="map"></canvas>
     <aside class="panel right">
@@ -84,87 +97,236 @@ const canvas = $<HTMLCanvasElement>('map');
 const status = $('status');
 const view = new MapView(canvas);
 const palette = new Palette($('palette'), (sel) => {
-  brush = { ...brush, ...sel };
-  if (tool === 'erase' || tool === 'select') setTool('paint');
+  if (!project) return;
+  brush = blockFromSheetRect(project, sel);
+  dropTransient();
   refresh();
 });
 
 let project: Project | null = null;
 let editor: Editor | null = null;
 let activeLayer = 0;
-let tool: Tool = 'paint';
-let brush: Brush = { sheetId: '', id: '0', flipX: false, flipY: false, rotation: 0 };
 let fileName = '';
 let fileHandle: FileHandle | null = null;
-let pressed = false;
-let lastCell: [number, number] | null = null;
 
-function setTool(t: Tool): void {
-  tool = t;
-  if (t !== 'select') view.selectedCell = null;
-  refresh();
+type Cell = [number, number];
+
+/** What the current pointer gesture is doing. Chosen on press from button, modifiers and state. */
+type Drag = { cancelled: boolean } & (
+  | { kind: 'paint'; last: Cell; block: Block }
+  | { kind: 'erase'; last: Cell; targets: number[] }
+  | { kind: 'fill'; press: Cell; cur: Cell; block: Block }
+  | { kind: 'eraseRect'; press: Cell; cur: Cell; targets: number[] }
+  | { kind: 'marquee'; press: Cell }
+  | { kind: 'move'; press: Cell; cur: Cell; copy: boolean; block: Block; targets: number[] }
+);
+
+/** The brush is the mode: a block picked in the palette paints; with none, the left button selects. */
+let brush: Block | null = null;
+let selection: Rect | null = null;
+/** A pasted block following the pointer until it is placed or cancelled. */
+let floating: Block | null = null;
+let clipboard: Block | null = null;
+let drag: Drag | null = null;
+let dragButton = 0;
+/** Ids of the extra (yellow) layers; the active layer is the blue one. Not saved in the file. */
+const yellow = new Set<string>();
+
+/** Layers that select, move, copy, paste and delete act on: the blue layer plus visible yellow ones. */
+function targetLayers(): number[] {
+  if (!project) return [];
+  return project.layers.flatMap((l, i) => (l.visible && (i === activeLayer || yellow.has(l.id)) ? [i] : []));
 }
 
 /** Applies fn to every cell on the straight line between two cells, so fast drags leave no gaps. */
-function forLine(a: [number, number], b: [number, number], fn: (x: number, y: number) => void): void {
+function forLine(a: Cell, b: Cell, fn: (x: number, y: number) => void): void {
   const steps = Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]), 1);
   for (let i = 0; i <= steps; i++) {
     fn(Math.round(a[0] + ((b[0] - a[0]) * i) / steps), Math.round(a[1] + ((b[1] - a[1]) * i) / steps));
   }
 }
 
-function applyTool(from: [number, number], to: [number, number]): void {
-  if (!editor) return;
-  const ed = editor;
-  forLine(from, to, (x, y) => {
-    if (tool === 'paint') ed.paint(activeLayer, x, y, brush);
-    else if (tool === 'erase') ed.erase(activeLayer, x, y);
-  });
-  view.draw();
+const inRect = (c: Cell, r: Rect): boolean => c[0] >= r.x0 && c[0] <= r.x1 && c[1] >= r.y0 && c[1] <= r.y1;
+const shifted = (r: Rect, dx: number, dy: number): Rect => ({ x0: r.x0 + dx, y0: r.y0 + dy, x1: r.x1 + dx, y1: r.y1 + dy });
+
+/** Pushes the selection, ghost and live rectangle for the current state to the map view. */
+function updateOverlay(): void {
+  view.selection = selection;
+  view.outline = null;
+  view.ghost = null;
+  if (!project) return;
+  const d = drag && !drag.cancelled ? drag : null;
+  if (d?.kind === 'fill') {
+    const t = tiledBlock(d.block, d.press, d.cur);
+    view.ghost = { block: t.block, at: [t.x, t.y] };
+    view.outline = { rect: rectOf(d.press[0], d.press[1], d.cur[0], d.cur[1]), color: '#7ee787' };
+  } else if (d?.kind === 'eraseRect') {
+    view.outline = { rect: rectOf(d.press[0], d.press[1], d.cur[0], d.cur[1]), color: '#ff6b6b' };
+  } else if (d?.kind === 'move' && selection) {
+    const dx = d.cur[0] - d.press[0];
+    const dy = d.cur[1] - d.press[1];
+    view.ghost = { block: d.block, at: [selection.x0 + dx, selection.y0 + dy] };
+    view.outline = { rect: shifted(selection, dx, dy), color: '#ffd54a' };
+  } else if (!drag || drag.kind === 'paint') {
+    const b = floating ?? brush;
+    if (b) view.ghost = { block: b, at: null };
+  }
 }
 
 view.handlers = {
-  down(cell) {
-    if (!editor) return;
-    if (tool === 'select') {
-      view.selectedCell = cell;
+  down(cell, e) {
+    if (!editor || !cell || drag) return;
+    const ed = editor;
+    dragButton = e.button;
+    if (e.button === 2) {
+      const targets = targetLayers();
+      if (e.shiftKey) {
+        drag = { kind: 'eraseRect', press: cell, cur: cell, targets, cancelled: false };
+      } else {
+        ed.beginStroke();
+        for (const li of targets) ed.erase(li, cell[0], cell[1]);
+        drag = { kind: 'erase', last: cell, targets, cancelled: false };
+      }
+    } else if (floating) {
+      const f = floating;
+      floating = null;
+      ed.stroke(() => ed.pasteBlock(f, cell[0], cell[1]));
       refresh();
       return;
+    } else if (brush) {
+      if (e.shiftKey) {
+        drag = { kind: 'fill', press: cell, cur: cell, block: brush, cancelled: false };
+      } else {
+        ed.beginStroke();
+        ed.paintBlock(activeLayer, cell[0], cell[1], brush);
+        drag = { kind: 'paint', last: cell, block: brush, cancelled: false };
+      }
+    } else if (selection && inRect(cell, selection)) {
+      const targets = targetLayers();
+      drag = { kind: 'move', press: cell, cur: cell, copy: e.altKey, block: ed.captureBlock(targets, selection), targets, cancelled: false };
+    } else {
+      selection = rectOf(cell[0], cell[1], cell[0], cell[1]);
+      drag = { kind: 'marquee', press: cell, cancelled: false };
     }
-    if (!cell) return;
-    pressed = true;
-    lastCell = cell;
-    editor.beginStroke();
-    applyTool(cell, cell);
+    updateOverlay();
+    view.draw();
   },
   move(cell) {
-    if (pressed && cell && lastCell) {
-      applyTool(lastCell, cell);
-      lastCell = cell;
+    const d = drag;
+    if (d && cell && editor) {
+      const ed = editor;
+      if (d.kind === 'paint') {
+        forLine(d.last, cell, (x, y) => ed.paintBlock(activeLayer, x, y, d.block));
+        d.last = cell;
+      } else if (d.kind === 'erase') {
+        forLine(d.last, cell, (x, y) => {
+          for (const li of d.targets) ed.erase(li, x, y);
+        });
+        d.last = cell;
+      } else if (d.kind === 'marquee') {
+        if (!d.cancelled) selection = rectOf(d.press[0], d.press[1], cell[0], cell[1]);
+      } else {
+        d.cur = cell;
+      }
     }
+    updateOverlay();
   },
-  up() {
-    if (!pressed) return;
-    pressed = false;
-    lastCell = null;
-    editor?.endStroke();
+  up(e) {
+    const d = drag;
+    if (!d || !editor || e.button !== dragButton) return;
+    const ed = editor;
+    drag = null;
+    if (d.kind === 'paint' || d.kind === 'erase') {
+      ed.endStroke();
+    } else if (!d.cancelled) {
+      if (d.kind === 'fill') {
+        ed.stroke(() => ed.fillRect(activeLayer, d.press, d.cur, d.block));
+      } else if (d.kind === 'eraseRect') {
+        ed.stroke(() => ed.deleteRect(d.targets, rectOf(d.press[0], d.press[1], d.cur[0], d.cur[1])));
+      } else if (d.kind === 'move' && selection) {
+        const sel = selection;
+        const dx = d.cur[0] - d.press[0];
+        const dy = d.cur[1] - d.press[1];
+        if (dx !== 0 || dy !== 0) {
+          ed.stroke(() => ed.moveCells(d.targets, sel, dx, dy, d.copy));
+          selection = shifted(sel, dx, dy);
+        }
+      }
+    }
     refresh();
   },
 };
 
-/** Flip/rotate acts on the selected placed tile in Select mode, otherwise on the brush. */
+/** Flip/rotate acts on the pending paste, else the selection (re-laid out in place), else the brush. */
 function orient(op: OrientOp): void {
   if (!editor) return;
-  if (tool === 'select') {
-    const cell = view.selectedCell;
-    if (!cell) return;
+  if (floating) {
+    floating = transformBlock(floating, op);
+  } else if (selection) {
     const ed = editor;
-    ed.stroke(() => ed.transform(activeLayer, cell[0], cell[1], op));
-    view.draw();
-  } else {
-    brush = { ...brush, ...applyOrientOp(brush, op) };
+    const sel = selection;
+    const targets = targetLayers();
+    ed.stroke(() => {
+      const b = ed.captureBlock(targets, sel);
+      ed.deleteRect(targets, sel);
+      const t = transformBlock(b, op);
+      ed.pasteBlock(t, sel.x0, sel.y0);
+      selection = { x0: sel.x0, y0: sel.y0, x1: sel.x0 + t.width - 1, y1: sel.y0 + t.height - 1 };
+    });
+  } else if (brush) {
+    brush = transformBlock(brush, op);
   }
   refresh();
+}
+
+function copySelection(): void {
+  if (!editor || !selection) return;
+  const b = editor.captureBlock(targetLayers(), selection);
+  if (b.cells.length === 0) {
+    status.classList.remove('error');
+    status.textContent = 'Nothing to copy: the selection has no tiles on the blue or yellow layers';
+    return;
+  }
+  clipboard = b;
+  status.classList.remove('error');
+  status.textContent = `Copied ${b.cells.length} tile(s). Ctrl+V to paste, then click to place.`;
+}
+
+function startPaste(): void {
+  if (!editor || !clipboard || drag) return;
+  floating = clipboard;
+  refresh();
+}
+
+function deleteSelection(): void {
+  if (!editor || !selection || drag) return;
+  const ed = editor;
+  const sel = selection;
+  ed.stroke(() => ed.deleteRect(targetLayers(), sel));
+  refresh();
+}
+
+/** Esc: cancel a rectangle or move in progress, else the paste, else the selection, else the brush. */
+function escape(): void {
+  if (drag) {
+    if (drag.kind === 'paint' || drag.kind === 'erase') return;
+    drag.cancelled = true;
+    if (drag.kind === 'marquee') selection = null;
+  } else if (floating) {
+    floating = null;
+  } else if (selection) {
+    selection = null;
+  } else if (brush) {
+    brush = null;
+    palette.setSelected(null);
+  }
+  refresh();
+}
+
+/** Drops the selection and pending paste, whose cells may no longer exist. */
+function dropTransient(): void {
+  selection = null;
+  floating = null;
 }
 
 function drawBrushPreview(): void {
@@ -173,9 +335,18 @@ function drawBrushPreview(): void {
   ctx.clearRect(0, 0, c.width, c.height);
   if (!project) return;
   ctx.imageSmoothingEnabled = false;
+  if (!brush) return;
+  const ts = project.tileSize;
+  const k = Math.min(c.width / (brush.width * ts), c.height / (brush.height * ts));
   ctx.save();
-  ctx.scale(c.width / project.tileSize, c.height / project.tileSize);
-  drawTile(ctx, project, { ...brush, extra: {} });
+  ctx.translate((c.width - brush.width * ts * k) / 2, (c.height - brush.height * ts * k) / 2);
+  ctx.scale(k, k);
+  for (const cell of brush.cells) {
+    ctx.save();
+    ctx.translate(cell.dx * ts, cell.dy * ts);
+    drawTile(ctx, project, cell.tile);
+    ctx.restore();
+  }
   ctx.restore();
 }
 
@@ -210,10 +381,7 @@ function refresh(): void {
   if (view.previewing && project && !getMapBounds(project)) view.setPreview(null);
   updateTitle();
   const editing = !view.previewing;
-  for (const id of ['tool-paint', 'tool-erase', 'tool-select', 'flip-h', 'flip-v', 'rot-cw', 'rot-ccw']) {
-    $<HTMLButtonElement>(id).disabled = !editing;
-  }
-  for (const t of ['paint', 'erase', 'select'] as Tool[]) $(`tool-${t}`).classList.toggle('active', tool === t);
+  for (const id of ['flip-h', 'flip-v', 'rot-cw', 'rot-ccw']) $<HTMLButtonElement>(id).disabled = !editing;
   $<HTMLButtonElement>('undo').disabled = !editing || !editor?.canUndo();
   $<HTMLButtonElement>('redo').disabled = !editing || !editor?.canRedo();
   const tileBtn = $<HTMLButtonElement>('tile-size');
@@ -227,8 +395,12 @@ function refresh(): void {
       : canResize
         ? 'Change the tile size (only possible while the map is empty)'
         : 'Erase all tiles to change the tile size';
-  view.ghost = project && tool === 'paint' ? { ...brush, extra: {} } : null;
-  $('brush-info').textContent = `${brush.flipX ? 'flipX ' : ''}${brush.flipY ? 'flipY ' : ''}rot ${brush.rotation}`;
+  updateOverlay();
+  $('brush-info').textContent = !brush
+    ? 'No brush: drag on the map to select'
+    : brush.cells.length === 1
+      ? `${brush.cells[0].tile.flipX ? 'flipX ' : ''}${brush.cells[0].tile.flipY ? 'flipY ' : ''}rot ${brush.cells[0].tile.rotation}`
+      : `${brush.width}x${brush.height} block`;
   drawBrushPreview();
   renderLayers();
   view.draw();
@@ -338,7 +510,7 @@ function renderLayers(): void {
   if (!project) return;
   project.layers.forEach((layer, i) => {
     const li = document.createElement('li');
-    li.className = i === activeLayer ? 'active' : '';
+    li.className = i === activeLayer ? 'active' : yellow.has(layer.id) ? 'multi' : '';
     const hidden = !layer.visible;
 
     const eye = document.createElement('button');
@@ -370,6 +542,13 @@ function renderLayers(): void {
     li.append(eye, name, col);
     li.addEventListener('click', () => {
       activeLayer = i;
+      yellow.clear();
+      refresh();
+    });
+    li.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (i === activeLayer) return;
+      if (!yellow.delete(layer.id)) yellow.add(layer.id);
       refresh();
     });
     ul.append(li);
@@ -386,10 +565,14 @@ function moveActiveLayer(delta: number): void {
 }
 
 function undo(): void {
-  if (!view.previewing && editor?.undo()) refresh();
+  if (drag || view.previewing || !editor?.undo()) return;
+  dropTransient();
+  refresh();
 }
 function redo(): void {
-  if (!view.previewing && editor?.redo()) refresh();
+  if (drag || view.previewing || !editor?.redo()) return;
+  dropTransient();
+  refresh();
 }
 
 async function loadText(text: string, name: string, handle: FileHandle | null): Promise<void> {
@@ -417,7 +600,11 @@ function adoptProject(next: Project, name: string, handle: FileHandle | null): v
   fileName = name;
   fileHandle = handle;
   activeLayer = 0;
-  brush = { sheetId: next.sheets[0]?.id ?? '', id: '0', flipX: false, flipY: false, rotation: 0 };
+  yellow.clear();
+  brush = null;
+  clipboard = null;
+  drag = null;
+  dropTransient();
   status.classList.remove('error');
   status.textContent = next.sheets.length
     ? `${name} - ${next.layers.length} layers, ${countTiles(next)} tiles, ${next.sheets.length} sheets`
@@ -425,7 +612,7 @@ function adoptProject(next: Project, name: string, handle: FileHandle | null): v
   palette.setProject(next);
   view.setPreview(null);
   view.setProject(next);
-  setTool('paint');
+  refresh();
   $('zoom').textContent = `Zoom ${view.zoomLabel()}`;
 }
 
@@ -564,7 +751,7 @@ function changeTileSize(): void {
     reportError('Cannot change tile size', new Error(result.reason === 'not-empty' ? 'Erase all tiles first.' : 'Invalid tile size.'));
     return;
   }
-  brush = { ...brush, sheetId: project.sheets[0]?.id ?? '', id: '0' };
+  brush = null;
   palette.setProject(project);
   status.classList.remove('error');
   status.textContent = `Tile size is now ${n}px`;
@@ -603,9 +790,6 @@ canvas.addEventListener('hovercell', (e) => {
   $('cell').textContent = c ? `Cell ${c[0]},${c[1]}` : '';
 });
 
-$('tool-paint').addEventListener('click', () => setTool('paint'));
-$('tool-erase').addEventListener('click', () => setTool('erase'));
-$('tool-select').addEventListener('click', () => setTool('select'));
 $('flip-h').addEventListener('click', () => orient('flipH'));
 $('flip-v').addEventListener('click', () => orient('flipV'));
 $('rot-cw').addEventListener('click', () => orient('rotateCW'));
@@ -628,6 +812,8 @@ $('layer-delete').addEventListener('click', () => {
   if (!editor || !project || project.layers.length <= 1) return;
   const layer = project.layers[activeLayer];
   if (layer.cells.size > 0 && !confirm(`Delete layer "${layer.name}" and its ${layer.cells.size} tiles? This cannot be undone.`)) return;
+  yellow.delete(layer.id);
+  dropTransient();
   editor.deleteLayer(activeLayer);
   activeLayer = Math.min(activeLayer, project.layers.length - 1);
   refresh();
@@ -670,9 +856,7 @@ $('sheet-delete').addEventListener('click', () => {
   }
   status.classList.remove('error');
   status.textContent = `Deleted sheet ${index + 1}`;
-  if (brush.sheetId === id) {
-    brush = { ...brush, sheetId: project.sheets[0]?.id ?? '', id: '0' };
-  }
+  if (brush?.cells.some((c) => c.tile.sheetId === id)) brush = null;
   // reload clears the palette selection when it was on the deleted sheet, which disables the gear.
   palette.reload(Math.min(index, project.sheets.length - 1));
   refresh();
@@ -703,7 +887,8 @@ $('redo').addEventListener('click', redo);
 
 window.addEventListener('keydown', (e) => {
   const t = e.target as HTMLElement;
-  if (t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && t.type === 'text')) return;
+  if (t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && t.type !== 'checkbox')) return;
+  if (document.querySelector('dialog[open]')) return;
   if (e.code === 'Space') {
     view.spaceHeld = true;
     e.preventDefault();
@@ -711,7 +896,16 @@ window.addEventListener('keydown', (e) => {
   }
   const mod = e.ctrlKey || e.metaKey;
   const k = e.key.toLowerCase();
-  if (mod && k === 'n') {
+  if (e.key === 'Escape') {
+    if (hideHelp()) return;
+    if (!view.previewing) escape();
+  } else if (mod && k === 'c') {
+    e.preventDefault();
+    if (!view.previewing) copySelection();
+  } else if (mod && k === 'v') {
+    e.preventDefault();
+    if (!view.previewing) startPaste();
+  } else if (mod && k === 'n') {
     e.preventDefault();
     openNewDialog();
   } else if (mod && k === 's') {
@@ -728,9 +922,7 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     redo();
   } else if (!mod && !e.altKey && !view.previewing) {
-    if (k === 'b') setTool('paint');
-    else if (k === 'e') setTool('erase');
-    else if (k === 'v') setTool('select');
+    if (e.key === 'Delete' || e.key === 'Backspace') deleteSelection();
     else if (k === 'x') orient('flipH');
     else if (k === 'y') orient('flipV');
     else if (k === 'r') orient(e.shiftKey ? 'rotateCCW' : 'rotateCW');
@@ -741,3 +933,14 @@ window.addEventListener('keyup', (e) => {
 });
 
 adoptProject(createBlankProject(DEFAULT_TILE_SIZE, 'Untitled'), '', null);
+
+/** Esc closes the help panel first. The panel itself is CSS-only (:hover and :focus-within). */
+const help = $('help');
+function hideHelp(): boolean {
+  if (help.classList.contains('dismissed') || !help.matches(':hover, :focus-within')) return false;
+  help.classList.add('dismissed');
+  help.blur();
+  return true;
+}
+help.addEventListener('mouseleave', () => help.classList.remove('dismissed'));
+help.addEventListener('focusout', () => help.classList.remove('dismissed'));

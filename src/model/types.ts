@@ -73,3 +73,18 @@ export function parseCellKey(key: string): [number, number] {
   const [x, y] = key.split(',');
   return [Number(x), Number(y)];
 }
+
+/** A rectangle of tiles: the brush, a copied selection and the pending paste all use this shape. */
+export interface BlockCell {
+  dx: number;
+  dy: number;
+  /** Source layer; absent for a palette brush, which always goes to the blue layer. */
+  layerId?: string;
+  tile: PlacedTile;
+}
+
+export interface Block {
+  width: number;
+  height: number;
+  cells: BlockCell[];
+}
