@@ -104,11 +104,12 @@ export function parseOfficeJson(input: string | unknown): Project {
       name: l.name,
       description: l.description ?? '',
       collider: !!l.collider,
+      visible: l.visible !== false,
       isAutoTile: !!l.isAutoTile,
       rules: l.rules ?? [],
       defaultTileVariants: l.defaultTileVariants ?? [],
       cells,
-      extra: omit(l, ['id', 'name', 'description', 'tiles', 'collider', 'isAutoTile', 'rules', 'defaultTileVariants']),
+      extra: omit(l, ['id', 'name', 'description', 'tiles', 'collider', 'visible', 'isAutoTile', 'rules', 'defaultTileVariants']),
     };
   });
 
@@ -178,6 +179,7 @@ export function serializeOfficeJson(p: Project): Record<string, unknown> {
       isAutoTile: l.isAutoTile,
       rules: l.rules,
       defaultTileVariants: l.defaultTileVariants,
+      ...(l.visible ? {} : { visible: false }),
       ...l.extra,
     };
   });

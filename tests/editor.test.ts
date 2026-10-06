@@ -167,6 +167,22 @@ describe('layer management', () => {
     expect(saved.layers[1].collider).toBe(!was);
   });
 
+  it('saves a hidden layer as visible:false, omits it when visible, and keeps tiles', () => {
+    const e = new Editor(sample());
+    const original = JSON.stringify(serializeOfficeJson(e.project));
+    expect(original).not.toContain('"visible"');
+    const tiles = e.project.layers[1].cells.size;
+    e.setVisible(1, false);
+    expect(e.dirty).toBe(true);
+    const saved: any = JSON.parse(JSON.stringify(serializeOfficeJson(e.project)));
+    expect(saved.layers[1].visible).toBe(false);
+    expect(saved.layers[1].tiles).toHaveLength(tiles);
+    expect(saved.layers[0]).not.toHaveProperty('visible');
+    expect(parseOfficeJson(saved).layers[1].visible).toBe(false);
+    e.setVisible(1, true);
+    expect(JSON.stringify(serializeOfficeJson(e.project))).toBe(original);
+  });
+
   it('clears undo history when a layer is deleted so undo cannot hit a missing layer', () => {
     const e = new Editor(sample());
     e.stroke(() => e.paint(1, 0, 0, brush()));

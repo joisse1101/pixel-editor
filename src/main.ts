@@ -1,6 +1,7 @@
 import { Editor, type Brush } from './editor/editor';
 import { applyOrientOp, type OrientOp } from './editor/orientation';
-import { countTiles, getMapBounds, tryLoadProject } from './model/office';
+import { hasFileAccess, pickFile, saveText, type FileHandle } from './io/files';
+import { countTiles, getMapBounds, serializeOfficeJson, tryLoadProject } from './model/office';
 import type { Project } from './model/types';
 import { drawTile, MapView } from './render/mapView';
 import { decodeSheets } from './render/sheets';
@@ -12,7 +13,12 @@ type Tool = 'paint' | 'erase' | 'select';
 const app = document.getElementById('app')!;
 app.innerHTML = `
   <header class="toolbar">
-    <label class="btn">Open Office.json<input id="open" type="file" accept=".json,application/json" hidden /></label>
+    <button id="open-btn" type="button" title="Open Office.json (Ctrl+O)">Open</button>
+    <input id="open" type="file" accept=".json,application/json" hidden />
+    <span class="group">
+      <button id="save" type="button" title="Save Office.json (Ctrl+S)">Save</button>
+      <button id="save-as" type="button" title="Save as... (Ctrl+Shift+S)">Save As</button>
+    </span>
     <span class="group">
       <button id="tool-paint" type="button" title="Paint (B)">Paint</button>
       <button id="tool-erase" type="button" title="Erase (E)">Erase</button>
@@ -45,7 +51,7 @@ app.innerHTML = `
         <button id="layer-delete" type="button" title="Delete layer">Delete</button>
       </div>
       <ul id="layers"></ul>
-      <p class="hint">Eye = show/hide (editor only). C = collider.</p>
+      <p class="hint">Eye = show/hide (saved in Office.json, not exported to Phaser). C = collider.</p>
     </aside>
     <canvas id="map"></canvas>
     <aside class="panel right">
@@ -72,6 +78,8 @@ let editor: Editor | null = null;
 let activeLayer = 0;
 let tool: Tool = 'paint';
 let brush: Brush = { sheetId: '', id: '0', flipX: false, flipY: false, rotation: 0 };
+let fileName = '';
+let fileHandle: FileHandle | null = null;
 let pressed = false;
 let lastCell: [number, number] | null = null;
 
@@ -155,7 +163,14 @@ function drawBrushPreview(): void {
   ctx.restore();
 }
 
+function updateTitle(): void {
+  document.title = `${editor?.dirty ? '* ' : ''}${fileName || 'Tilemap editor'}`;
+  $<HTMLButtonElement>('save').disabled = !editor;
+  $<HTMLButtonElement>('save-as').disabled = !editor;
+}
+
 function refresh(): void {
+  updateTitle();
   for (const t of ['paint', 'erase', 'select'] as Tool[]) $(`tool-${t}`).classList.toggle('active', tool === t);
   $<HTMLButtonElement>('undo').disabled = !editor?.canUndo();
   $<HTMLButtonElement>('redo').disabled = !editor?.canRedo();
@@ -173,7 +188,7 @@ function renderLayers(): void {
   project.layers.forEach((layer, i) => {
     const li = document.createElement('li');
     li.className = i === activeLayer ? 'active' : '';
-    const hidden = view.hiddenLayers.has(layer.id);
+    const hidden = !layer.visible;
 
     const eye = document.createElement('button');
     eye.type = 'button';
@@ -182,8 +197,7 @@ function renderLayers(): void {
     eye.textContent = hidden ? '—' : '◉';
     eye.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (hidden) view.hiddenLayers.delete(layer.id);
-      else view.hiddenLayers.add(layer.id);
+      editor?.setVisible(i, hidden);
       refresh();
     });
 
@@ -227,14 +241,11 @@ function redo(): void {
   if (editor?.redo()) refresh();
 }
 
-$('open').addEventListener('change', async (e) => {
-  const input = e.target as HTMLInputElement;
-  const file = input.files?.[0];
-  input.value = '';
-  if (!file) return;
-  const result = tryLoadProject(await file.text(), project);
+async function loadText(text: string, name: string, handle: FileHandle | null): Promise<void> {
+  if (editor?.dirty && !confirm('You have unsaved changes. Open another file anyway?')) return;
+  const result = tryLoadProject(text, project);
   if (result.error || !result.project) {
-    status.textContent = `Could not open ${file.name}: ${result.error}`;
+    status.textContent = `Could not open ${name}: ${result.error}`;
     status.classList.add('error');
     return;
   }
@@ -242,17 +253,73 @@ $('open').addEventListener('change', async (e) => {
   await decodeSheets(result.project);
   project = result.project;
   editor = new Editor(project);
-  editor.onChange = () => view.draw();
+  editor.onChange = () => {
+    view.draw();
+    updateTitle();
+  };
+  fileName = name;
+  fileHandle = handle;
   activeLayer = 0;
   const first = project.sheets[0];
   brush = { sheetId: first?.id ?? '', id: '0', flipX: false, flipY: false, rotation: 0 };
   const b = getMapBounds(project);
-  status.textContent = `${file.name} - ${project.layers.length} layers, ${countTiles(project)} tiles, ${project.sheets.length} sheets, map ${b.width}x${b.height}`;
+  status.textContent = `${name} - ${project.layers.length} layers, ${countTiles(project)} tiles, ${project.sheets.length} sheets, map ${b.width}x${b.height}`;
   palette.setProject(project);
   palette.setSelected({ sheetId: brush.sheetId, id: brush.id });
   view.setProject(project);
   setTool('paint');
   $('zoom').textContent = `Zoom ${view.zoomLabel()}`;
+}
+
+async function openFile(): Promise<void> {
+  if (!hasFileAccess()) {
+    $('open').click();
+    return;
+  }
+  try {
+    const picked = await pickFile();
+    if (picked) await loadText(picked.text, picked.handle.name, picked.handle);
+  } catch (err) {
+    // The picker can be blocked (embedded browser, policy); the plain file chooser still works.
+    console.warn('File picker failed, using file input', err);
+    $('open').click();
+  }
+}
+
+async function saveFile(saveAs: boolean): Promise<void> {
+  if (!editor || !project) return;
+  try {
+    const text = JSON.stringify(serializeOfficeJson(project));
+    const saved = await saveText(text, fileHandle, fileName || 'Office.json', saveAs);
+    if (!saved) return;
+    fileHandle = saved.handle;
+    fileName = saved.name;
+    editor.dirty = false;
+    status.classList.remove('error');
+    status.textContent = `Saved ${saved.name}`;
+    updateTitle();
+  } catch (err) {
+    reportError('Save failed', err);
+  }
+}
+
+function reportError(prefix: string, err: unknown): void {
+  status.textContent = `${prefix}: ${err instanceof Error ? err.message : String(err)}`;
+  status.classList.add('error');
+}
+
+$('open-btn').addEventListener('click', () => void openFile());
+$('save').addEventListener('click', () => void saveFile(false));
+$('save-as').addEventListener('click', () => void saveFile(true));
+$('open').addEventListener('change', async (e) => {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (file) await loadText(await file.text(), file.name, null);
+});
+
+window.addEventListener('beforeunload', (e) => {
+  if (editor?.dirty) e.preventDefault();
 });
 
 $('grid').addEventListener('change', (e) => {
@@ -295,7 +362,6 @@ $('layer-delete').addEventListener('click', () => {
   if (!editor || !project || project.layers.length <= 1) return;
   const layer = project.layers[activeLayer];
   if (layer.cells.size > 0 && !confirm(`Delete layer "${layer.name}" and its ${layer.cells.size} tiles? This cannot be undone.`)) return;
-  view.hiddenLayers.delete(layer.id);
   editor.deleteLayer(activeLayer);
   activeLayer = Math.min(activeLayer, project.layers.length - 1);
   refresh();
@@ -315,7 +381,13 @@ window.addEventListener('keydown', (e) => {
   }
   const mod = e.ctrlKey || e.metaKey;
   const k = e.key.toLowerCase();
-  if (mod && k === 'z') {
+  if (mod && k === 's') {
+    e.preventDefault();
+    void saveFile(e.shiftKey);
+  } else if (mod && k === 'o') {
+    e.preventDefault();
+    void openFile();
+  } else if (mod && k === 'z') {
     e.preventDefault();
     if (e.shiftKey) redo();
     else undo();

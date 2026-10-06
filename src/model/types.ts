@@ -24,6 +24,8 @@ export interface Layer {
   name: string;
   description: string;
   collider: boolean;
+  /** Editor visibility. Saved to Office.json only when false; never used by the Phaser export. */
+  visible: boolean;
   isAutoTile: boolean;
   rules: unknown[];
   defaultTileVariants: unknown[];

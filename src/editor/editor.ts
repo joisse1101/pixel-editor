@@ -119,6 +119,7 @@ export class Editor {
       name,
       description: '',
       collider: false,
+      visible: true,
       isAutoTile: false,
       rules: [],
       defaultTileVariants: [],
@@ -137,6 +138,11 @@ export class Editor {
 
   setCollider(index: number, collider: boolean): void {
     this.project.layers[index].collider = collider;
+    this.structureChanged();
+  }
+
+  setVisible(index: number, visible: boolean): void {
+    this.project.layers[index].visible = visible;
     this.structureChanged();
   }
 
