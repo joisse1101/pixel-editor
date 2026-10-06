@@ -11,7 +11,7 @@ The office map lives in a Sprite Fusion project (`office/Office.json`) and is ba
 - Tileset management: use the embedded sprite sheets, import new PNG sheets, edit per-tile attributes (e.g. `interaction=water`).
 - Resizable map (starts at 40x26).
 - "Bake" export that regenerates `map.json` (Tiled JSON) and `spritesheet.png` from the project, functionally equivalent for Phaser (not byte-identical to Sprite Fusion).
-- Office.json is extended with optional fields: tile `rotation`, `settings.mapSize`. Compatibility with reopening the file in Sprite Fusion is explicitly **not** required.
+- Office.json is extended with optional fields: tile `rotation`, `settings.mapSize`, `settings.mapOrigin`. Compatibility with reopening the file in Sprite Fusion is explicitly **not** required.
 
 ## Capabilities
 
@@ -29,5 +29,5 @@ The office map lives in a Sprite Fusion project (`office/Office.json`) and is ba
 
 - New code: whole app (greenfield; repo only contains `office/` sample data).
 - Dependencies: Vite, TypeScript (dev). No runtime framework planned.
-- Data: Office.json gains optional `rotation` on tiles and `settings.mapSize`; map.json/spritesheet.png become generated artifacts.
+- Data: Office.json gains optional `rotation` on tiles and `settings.mapSize` / `settings.mapOrigin`; map.json/spritesheet.png become generated artifacts.
 - Reference data: `office/` (Office.json, map.json, spritesheet.png) serves as the fixture for round-trip and bake verification.

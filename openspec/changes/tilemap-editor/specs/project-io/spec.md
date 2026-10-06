@@ -27,11 +27,19 @@ The system SHALL export the current project as an `Office.json` file that, when 
 - **THEN** the editor shows the same edits
 
 ### Requirement: Extension fields
-The system SHALL persist tile rotation as an optional `rotation` field (0, 90, 180 or 270) and the map size as an optional `settings.mapSize` (`width`, `height` in tiles), and SHALL treat a missing field as rotation 0 or a size derived from the tile bounds.
+The system SHALL persist tile rotation as an optional `rotation` field (0, 90, 180 or 270), and the map rectangle as optional `settings.mapSize` (`width`, `height` in tiles) and `settings.mapOrigin` (`x`, `y` in absolute cells). A missing rotation SHALL mean 0, a missing origin SHALL mean the minimum tile cell, and a missing size SHALL mean the extent from the origin to the maximum tile cell. The system SHALL NOT add these fields when saving a project that did not set them.
 
 #### Scenario: Legacy file without extensions
 - **WHEN** the user imports the sample `Office.json`
-- **THEN** all tiles have rotation 0 and the map size is 40x26
+- **THEN** all tiles have rotation 0, the map origin is cell (21,4) and the map size is 40x26
+
+#### Scenario: Unedited save
+- **WHEN** the user saves the sample without changing the map size or origin
+- **THEN** the saved settings contain neither `mapSize` nor `mapOrigin`
+
+#### Scenario: Negative cells
+- **WHEN** a file has tiles at negative pixel positions
+- **THEN** they are imported and saved at the same positions
 
 ### Requirement: Regenerated cached exports
 The system SHALL regenerate the `exports` section of `Office.json` (baked spritesheet and tile list) on every save so it is consistent with the saved layers.

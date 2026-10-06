@@ -4,7 +4,7 @@ Greenfield repo. `office/Office.json` is a Sprite Fusion project; `map.json` + `
 
 Observed format facts that drive the design:
 - Office.json layers are listed top to bottom (`Floor` is last = drawn first). map.json lists them bottom to top.
-- Tiles are sparse: `{id, x, y, spriteSheetId, scaleX, scaleY}` with pixel `x/y`. `id` is a string index into the named sprite sheet (row-major, sheet width / tileSize columns).
+- Tiles are sparse: `{id, x, y, spriteSheetId, scaleX, scaleY}` with pixel `x/y`, not zero-based (sample minimum is 336,64). `id` is a string index into the named sprite sheet (row-major, sheet width / tileSize columns).
 - 16 sprite sheets are embedded as base64 PNG data URLs; attributes are keyed by tile id per sheet (`[{id, key, value}]`).
 - The bake has no Tiled flip bits: flipped tiles become separate pixel-transformed tiles in the spritesheet (98 used of 104 slots, 8 columns).
 - `exports.tiles[].hash` is a per-tile hash used by Sprite Fusion; we do not need to match it.
@@ -30,7 +30,7 @@ Observed format facts that drive the design:
 
 **Rotation as `rotation` on the tile (0/90/180/270), flips remain `scaleX/scaleY`.** Effective transform order is flip first, then rotate. Rotation is omitted when 0, so untouched files stay identical to the Sprite Fusion shape. Alternative: encode with the Tiled 3-bit flip scheme (H, V, D). Rejected for the file; baking handles transforms at pixel level anyway.
 
-**Map size in `settings.mapSize`; if absent, derive from tile bounds (rounded up to cover x/y max).** For the sample this gives 40x26, matching map.json. Alternative: auto-fit on every export, rejected because it removes intentional empty margins.
+**Map rectangle: absolute cells, with an origin.** Sprite Fusion positions are not zero-based: the sample's tiles span cells x 21-60, y 4-29, and map.json cell (0,0) is Office cell (21,4). So tiles stay at absolute cell coordinates in the model (lossless round trip, negative cells allowed), and the map rectangle is `origin + size`. `settings.mapOrigin` (`x`, `y` in cells) and `settings.mapSize` (`width`, `height`) are optional extensions; when absent, origin is the minimum tile cell and size spans to the maximum tile cell (sample: origin (21,4), 40x26). An unedited save writes neither. Editor and bake draw cells relative to the origin. Alternative: auto-fit on every export, rejected because it removes intentional empty margins.
 
 **Bake pipeline (pure functions, no DOM beyond canvas):**
 

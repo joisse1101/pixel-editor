@@ -5,10 +5,10 @@
 
 ## 2. Project model and IO (project-io)
 
-- [ ] 2.1 Define the in-memory model (layers with cell map, sheets with decoded bitmaps and attributes, settings, passthrough bag) and verify it loads the sample with 10 layers, 1850 tiles, 16 sheets (unit test)
-- [ ] 2.2 Implement Office.json parse with validation errors for missing `layers`/`spriteSheets`/`tileSize` and verify invalid input leaves the loaded project untouched (unit test)
-- [ ] 2.3 Implement Office.json serialize incl. optional `rotation` and `settings.mapSize`, and verify import -> save -> import yields an equal project and an unedited save preserves all original fields (round-trip test on the sample)
-- [ ] 2.4 Derive map size from tile bounds when `mapSize` is absent and verify the sample gives 40x26 (unit test)
+- [x] 2.1 Define the in-memory model (layers with cell map, sheets with decoded bitmaps and attributes, settings, passthrough bag) and verify it loads the sample with 10 layers, 1850 tiles, 16 sheets (unit test)
+- [x] 2.2 Implement Office.json parse with validation errors for missing `layers`/`spriteSheets`/`tileSize` and verify invalid input leaves the loaded project untouched (unit test)
+- [x] 2.3 Implement Office.json serialize incl. optional `rotation`, `settings.mapSize` and `settings.mapOrigin`, and verify import -> save -> import yields an equal project and an unedited save preserves all original fields (round-trip test on the sample)
+- [x] 2.4 Derive map origin and size from tile bounds when `mapOrigin`/`mapSize` are absent and verify the sample gives origin (21,4) and 40x26 (unit test)
 - [ ] 2.5 Open/save via File System Access API with download/upload fallback, plus unsaved-changes `beforeunload` warning; verify manually in Chrome and in a browser without the API
 
 ## 3. Rendering (tile-editing)
