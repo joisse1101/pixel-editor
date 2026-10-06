@@ -35,10 +35,10 @@ app.insertAdjacentHTML(
       <button id="redo" type="button" title="Redo (Ctrl+Y)">Redo</button>
     </span>
     <span class="group">
-      <button id="flip-h" type="button" title="Flip horizontally (X)" disabled>Flip H</button>
-      <button id="flip-v" type="button" title="Flip vertically (Y)" disabled>Flip V</button>
-      <button id="rot-ccw" type="button" title="Rotate counter-clockwise" disabled>&#8634;</button>
-      <button id="rot-cw" type="button" title="Rotate clockwise" disabled>&#8635;</button>
+      <button id="flip-h" type="button" title="Flip horizontally (X)">Flip H</button>
+      <button id="flip-v" type="button" title="Flip vertically (Y)">Flip V</button>
+      <button id="rot-ccw" type="button" title="Rotate counter-clockwise">&#8634;</button>
+      <button id="rot-cw" type="button" title="Rotate clockwise">&#8635;</button>
     </span>
     <button id="resize" type="button" title="Resize canvas" disabled>Resize</button>
     <label><input id="grid" type="checkbox" checked /> Grid</label>
@@ -229,6 +229,15 @@ $('save').addEventListener('click', () => void saveImage(false));
 $('save-as').addEventListener('click', () => void saveImage(true));
 $('undo').addEventListener('click', () => doc.undo());
 $('redo').addEventListener('click', () => doc.redo());
+$('flip-h').addEventListener('click', () => doc.flip('h'));
+$('flip-v').addEventListener('click', () => doc.flip('v'));
+for (const [id, dir] of [['rot-ccw', 'ccw'], ['rot-cw', 'cw']] as const) {
+  $(id).addEventListener('click', () => {
+    const [w, h] = [doc.width, doc.height];
+    doc.rotate(dir);
+    if (doc.width !== w || doc.height !== h) view.fit();
+  });
+}
 $('fit').addEventListener('click', () => {
   view.fit();
   refreshStatus();
