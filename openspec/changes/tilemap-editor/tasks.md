@@ -35,9 +35,9 @@
 ## 6. Tilesets (tileset-management)
 
 - [x] 6.1 Palette panel listing sheets as selectable 16px tile grids; verify selecting a tile sets the brush
-- [ ] 6.2 Import PNG as a new sheet (slice by tile size, warn on partial tiles); verify import of a 64x32 PNG yields 8 tiles and is embedded on save (unit test)
-- [ ] 6.3 Per-tile attribute editor (add/edit/remove key/value with generated uuid); verify it round-trips in Office.json
-- [ ] 6.4 Block deleting a sheet that has placed tiles and show the usage count; verify the message and that unused sheets can be removed
+- [x] 6.2 Import PNG as a new sheet (slice by tile size, warn on partial tiles); verify import of a 64x32 PNG yields 8 tiles and is embedded on save (unit test)
+- [x] 6.3 Per-tile attribute editor (add/edit/remove key/value with generated uuid); verify it round-trips in Office.json
+- [x] 6.4 Block deleting a sheet that has placed tiles and show the usage count; verify the message and that unused sheets can be removed
 
 ## 7. Phaser bake (phaser-export)
 
