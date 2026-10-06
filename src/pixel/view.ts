@@ -1,5 +1,6 @@
 import type { PixelDocument } from './document';
 import type { Point, Rgba } from './ops';
+import { LEVEL_COLORS } from './gridLevels';
 import { Viewport } from './viewport';
 
 export interface PixelPointerHandlers {
@@ -22,6 +23,8 @@ const isTyping = (t: EventTarget | null): boolean => t instanceof HTMLElement &&
 export class PixelView {
   readonly viewport = new Viewport();
   showGrid = true;
+  /** Overlay grid cell sizes in image pixels, e.g. [16, 32]. */
+  gridLevels: number[] = [];
   handlers: PixelPointerHandlers | null = null;
   preview: PixelPreview | null = null;
   /** Image pixel under the pointer, or null when it is not over the image. */
@@ -262,6 +265,29 @@ export class PixelView {
       }
       ctx.stroke();
     }
+
+    // User-defined overlay levels: every N image pixels, drawn at any zoom that keeps lines >= 3px apart.
+    ctx.lineWidth = 3;
+    ctx.globalAlpha = 0.4;
+    this.gridLevels.forEach((n, i) => {
+      if (n * scale < 3) return;
+      ctx.strokeStyle = LEVEL_COLORS[i % LEVEL_COLORS.length];
+      ctx.beginPath();
+      for (let x = n; x < w; x += n) {
+        const sx = Math.round(ox + x * scale) + 0.5;
+        if (sx < 0 || sx > this.cssW) continue;
+        ctx.moveTo(sx, y0);
+        ctx.lineTo(sx, y1);
+      }
+      for (let y = n; y < h; y += n) {
+        const sy = Math.round(oy + y * scale) + 0.5;
+        if (sy < 0 || sy > this.cssH) continue;
+        ctx.moveTo(x0, sy);
+        ctx.lineTo(x1, sy);
+      }
+      ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
 
     // The boundary is always outlined.
     ctx.strokeStyle = '#8a8af0';
