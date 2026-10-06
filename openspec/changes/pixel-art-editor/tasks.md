@@ -36,7 +36,7 @@
 - [x] 6.5 Wire Flip and Rotate buttons to the selection or whole canvas; verify canvas rotation swaps size and undo restores it
 - [x] 6.6 Add the New dialog and Resize dialog (width, height, 3x3 anchor picker, validation messages); verify invalid sizes are rejected with a message and a resize is one undo step that clears the selection
 - [x] 6.7 Add keyboard shortcuts (P, E, I, G, L, R, S, X, Y, [, ], Ctrl+Z/Y/Shift+Z, Ctrl+C/V, Ctrl+S, Ctrl+O, Ctrl+N) ignored while a text field or dialog has focus; verify typing in the resize width field does not switch tools
-- [ ] 6.8 Add the `beforeunload` unsaved-changes guard and unsaved confirmation on New/Open; verify it appears only when the history is not at the saved position
+- [x] 6.8 Add the `beforeunload` unsaved-changes guard and unsaved confirmation on New/Open; verify it appears only when the history is not at the saved position
 
 ## 7. Verification
 

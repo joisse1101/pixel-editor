@@ -325,6 +325,12 @@ window.addEventListener('keydown', (e) => {
     doc.deleteSelection();
   }
 });
+// Warn before the tab closes or reloads with unsaved edits.
+window.addEventListener('beforeunload', (e) => {
+  if (!doc.isDirty) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
 $('px-canvas').addEventListener('wheel', () => requestAnimationFrame(refreshStatus), { passive: true });
 
 view.fit();
