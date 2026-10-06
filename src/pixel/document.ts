@@ -1,5 +1,5 @@
 import type { Pixels } from '../model/pngCodec';
-import { History, type ImageHolder } from './history';
+import { History, type ImageHolder, type Layer, type LayerState } from './history';
 import {
   clonePixels,
   createPixels,
@@ -45,7 +45,10 @@ const intersect = (a: Rect, b: Rect): Rect | null => {
  * one undo step (or none when it changes nothing). No DOM.
  */
 export class PixelDocument implements ImageHolder {
-  px: Pixels;
+  /** Bottom layer first. Never empty; every layer has the canvas size. */
+  layers: Layer[];
+  activeIndex = 0;
+  private nextLayerId = 1;
   readonly history: History;
   selection: Rect | null = null;
   floating: Floating | null = null;
@@ -54,10 +57,17 @@ export class PixelDocument implements ImageHolder {
   onChange: () => void = () => {};
 
   constructor(width = DEFAULT_SIZE, height = DEFAULT_SIZE) {
-    this.px = createPixels(width, height);
+    this.layers = [this.makeLayer('Layer 1', createPixels(width, height))];
     this.history = new History(this);
   }
 
+  /** The active layer's pixels: what tools, selection and the eyedropper act on. */
+  get px(): Pixels {
+    return this.layers[this.activeIndex].px;
+  }
+  get activeLayer(): Layer {
+    return this.layers[this.activeIndex];
+  }
   get width(): number {
     return this.px.width;
   }
@@ -81,8 +91,8 @@ export class PixelDocument implements ImageHolder {
   }
 
   /** Makes `px` the image, with no history; it counts as saved. */
-  load(px: Pixels): void {
-    this.replace(px);
+  load(px: Pixels, name?: string): void {
+    this.replace(px, name);
   }
 
   markSaved(): void {
@@ -90,12 +100,144 @@ export class PixelDocument implements ImageHolder {
     this.onChange();
   }
 
-  private replace(px: Pixels): void {
+  private makeLayer(name: string, px: Pixels, visible = true): Layer {
+    return { id: this.nextLayerId++, name, visible, px };
+  }
+
+  private replace(px: Pixels, name = 'Layer 1'): void {
     this.floating = null;
     this.selection = null;
-    this.px = px;
+    this.layers = [this.makeLayer(name, px)];
+    this.activeIndex = 0;
     this.history.clear();
     this.onChange();
+  }
+
+  // ---- Layers ----
+
+  /**
+   * Makes layer `index` the one edits act on. Floating pixels are written to the layer they came from
+   * first; the selection rectangle and the clipboard stay. Not an undo step.
+   */
+  setActive(index: number): void {
+    if (index === this.activeIndex || index < 0 || index >= this.layers.length) return;
+    this.commitFloating();
+    this.activeIndex = index;
+    this.onChange();
+  }
+
+  /** Shows or hides a layer. Not an undo step and does not make the document dirty. */
+  setVisible(index: number, visible: boolean): void {
+    const layer = this.layers[index];
+    if (!layer || layer.visible === visible) return;
+    layer.visible = visible;
+    this.onChange();
+  }
+
+  /** A single fully transparent layer: nothing worth keeping, so an import replaces it. */
+  get isBlank(): boolean {
+    return this.layers.length === 1 && this.isLayerEmpty(0);
+  }
+
+  /** Whether the layer has no visible pixel at all. */
+  isLayerEmpty(index: number): boolean {
+    const d = this.layers[index].px.data;
+    for (let i = 3; i < d.length; i += 4) if (d[i] !== 0) return false;
+    return true;
+  }
+
+  /** Adds a transparent layer directly above the active one and activates it. */
+  addLayer(): void {
+    const layer = this.makeLayer(`Layer ${this.nextLayerId}`, createPixels(this.width, this.height));
+    const at = this.activeIndex + 1;
+    this.structure([...this.layers.slice(0, at), layer, ...this.layers.slice(at)], at);
+  }
+
+  /** Copies the active layer directly above it; the copy is active. */
+  duplicateLayer(): void {
+    const src = this.activeLayer;
+    const copy = this.makeLayer(`${src.name} copy`, clonePixels(src.px), src.visible);
+    const at = this.activeIndex + 1;
+    this.structure([...this.layers.slice(0, at), copy, ...this.layers.slice(at)], at);
+  }
+
+  /** Removes a layer (the last one is kept). Deleting the active layer activates the nearest remaining one. */
+  deleteLayer(index = this.activeIndex): boolean {
+    if (this.layers.length <= 1 || index < 0 || index >= this.layers.length) return false;
+    const active = this.activeLayer;
+    const layers = this.layers.filter((_, i) => i !== index);
+    this.structure(layers, index === this.activeIndex ? Math.max(0, index - 1) : layers.indexOf(active));
+    return true;
+  }
+
+  /** Renames a layer; an empty or unchanged name does nothing. */
+  renameLayer(index: number, name: string): boolean {
+    const layer = this.layers[index];
+    const next = name.trim();
+    if (!layer || !next || next === layer.name) return false;
+    this.structure(
+      this.layers.map((l, i) => (i === index ? { ...l, name: next } : l)),
+      this.activeIndex,
+    );
+    return true;
+  }
+
+  /** Moves a layer one place up (+1) or down (-1) the stack; the active layer stays active. */
+  moveLayer(index: number, dir: 1 | -1): boolean {
+    const to = index + dir;
+    if (index < 0 || index >= this.layers.length || to < 0 || to >= this.layers.length) return false;
+    const active = this.activeLayer;
+    const layers = this.layers.slice();
+    [layers[index], layers[to]] = [layers[to], layers[index]];
+    this.structure(layers, layers.indexOf(active));
+    return true;
+  }
+
+  /** Records a change to the layer list as one step. */
+  private structure(layers: Layer[], activeIndex: number): void {
+    this.settle();
+    this.history.snapshot({ layers, activeIndex });
+    this.onChange();
+  }
+
+  /** Applies `fn` to every layer's pixels as one step; layers keep their ids and names. */
+  private mapLayers(fn: (px: Pixels) => Pixels): void {
+    const state: LayerState = {
+      layers: this.layers.map((l) => ({ ...l, px: fn(l.px) })),
+      activeIndex: this.activeIndex,
+    };
+    this.history.snapshot(state);
+  }
+
+  /**
+   * Adds each image as a layer above the others, in order. The canvas grows to the largest width and
+   * height (top-left anchored, padding with transparency) so nothing is clipped. A single transparent
+   * layer is replaced and the canvas takes the first image size. One undo step. Returns whether the
+   * canvas size changed. Throws, changing nothing, when the result would exceed the size limit.
+   */
+  addLayers(images: { name: string; px: Pixels }[]): boolean {
+    if (!images.length) return false;
+    const adopt = this.isBlank;
+    let w = adopt ? images[0].px.width : this.width;
+    let h = adopt ? images[0].px.height : this.height;
+    for (const img of images) {
+      w = Math.max(w, img.px.width);
+      h = Math.max(h, img.px.height);
+    }
+    const err = validateSize(w, h);
+    if (err) throw new Error(err);
+    this.settle();
+    const wasClean = !this.isDirty;
+    const grown = w !== this.width || h !== this.height;
+    const top: Anchor = { ax: 0, ay: 0 };
+    const kept = adopt ? [] : this.layers.map((l) => (grown ? { ...l, px: resizePixels(l.px, w, h, top) } : l));
+    const added = images.map((img) => this.makeLayer(img.name, resizePixels(img.px, w, h, top)));
+    const layers = [...kept, ...added];
+    this.history.snapshot({ layers, activeIndex: layers.length - 1 });
+    if (adopt && wasClean) this.history.markSaved();
+    if (this.selection) this.selection = intersect(this.selection, wholeRect(this.px));
+    this.onChange();
+    return grown;
   }
 
   // ---- Strokes: pencil, eraser, shapes ----
@@ -236,7 +378,16 @@ export class PixelDocument implements ImageHolder {
   flip(axis: 'h' | 'v'): void {
     this.settle();
     if (this.floating) return;
-    const rect = this.selection ?? wholeRect(this.px);
+    if (!this.selection) {
+      this.mapLayers((px) => {
+        const out = clonePixels(px);
+        flipPixels(out, axis);
+        return out;
+      });
+      this.onChange();
+      return;
+    }
+    const rect = this.selection;
     const region = extract(this.px, rect);
     flipPixels(region, axis);
     this.history.beginStroke();
@@ -250,7 +401,7 @@ export class PixelDocument implements ImageHolder {
     if (this.floating) return;
     const rect = this.selection;
     if (!rect) {
-      this.history.snapshot(rotatePixels(this.px, dir));
+      this.mapLayers((px) => rotatePixels(px, dir));
       this.onChange();
       return;
     }
@@ -270,7 +421,7 @@ export class PixelDocument implements ImageHolder {
     if (err) throw new Error(err);
     this.settle();
     this.selection = null;
-    this.history.snapshot(resizePixels(this.px, width, height, anchor));
+    this.mapLayers((px) => resizePixels(px, width, height, anchor));
     this.onChange();
   }
 

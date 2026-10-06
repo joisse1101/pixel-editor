@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { History, type ImageHolder } from '../src/pixel/history';
+import { History, type ImageHolder, type Layer } from '../src/pixel/history';
 import { createPixels, getPixel, setPixel, type Rgba } from '../src/pixel/ops';
 
 const R: Rgba = [255, 0, 0, 255];
 const B: Rgba = [0, 0, 255, 128];
+const makeLayer = (id: number, w = 4, h = 4): Layer => ({ id, name: `L${id}`, visible: true, px: createPixels(w, h) });
+const makeHolder = (...layers: Layer[]): ImageHolder => ({
+  layers,
+  activeIndex: 0,
+  get px() {
+    return this.layers[this.activeIndex].px;
+  },
+});
 const setup = () => {
-  const holder: ImageHolder = { px: createPixels(4, 4) };
+  const holder = makeHolder(makeLayer(1));
   return { holder, h: new History(holder) };
 };
 const stroke = (h: History, ...writes: [number, Rgba][]) => {
@@ -132,5 +140,85 @@ describe('History dirty flag', () => {
     h.clear();
     expect(h.isDirty).toBe(false);
     expect(h.canUndo).toBe(false);
+  });
+});
+
+describe('History with layers', () => {
+  const two = () => {
+    const holder = makeHolder(makeLayer(1), makeLayer(2));
+    return { holder, h: new History(holder) };
+  };
+  const pixelOf = (holder: ImageHolder, layer: number, x: number, y: number) => getPixel(holder.layers[layer].px, x, y);
+
+  it('undoes a diff on a non-active layer and makes it active again', () => {
+    const { holder, h } = two();
+    stroke(h, [0, R]);
+    holder.activeIndex = 1;
+    stroke(h, [1, B]);
+    holder.activeIndex = 0;
+    h.undo();
+    expect(holder.activeIndex).toBe(1);
+    expect(pixelOf(holder, 1, 1, 0)).toEqual([0, 0, 0, 0]);
+    expect(pixelOf(holder, 0, 0, 0)).toEqual(R);
+    h.undo();
+    expect(holder.activeIndex).toBe(0);
+    expect(pixelOf(holder, 0, 0, 0)).toEqual([0, 0, 0, 0]);
+    holder.activeIndex = 1;
+    h.redo();
+    expect(holder.activeIndex).toBe(0);
+    expect(pixelOf(holder, 0, 0, 0)).toEqual(R);
+    h.redo();
+    expect(holder.activeIndex).toBe(1);
+    expect(pixelOf(holder, 1, 1, 0)).toEqual(B);
+  });
+
+  it('abortStroke restores the layer the stroke started on', () => {
+    const { holder, h } = two();
+    holder.activeIndex = 1;
+    h.beginStroke();
+    h.write(0, R);
+    holder.activeIndex = 0;
+    h.abortStroke();
+    expect(pixelOf(holder, 1, 0, 0)).toEqual([0, 0, 0, 0]);
+  });
+
+  it('interleaves structure snapshots with diffs', () => {
+    const { holder, h } = two();
+    stroke(h, [0, R]); // layer 1
+    const added = makeLayer(3);
+    h.snapshot({ layers: [...holder.layers, added], activeIndex: 2 });
+    expect(holder.layers).toHaveLength(3);
+    stroke(h, [2, B]); // on the new layer
+    h.undo();
+    h.undo();
+    expect(holder.layers.map((l) => l.id)).toEqual([1, 2]);
+    h.undo();
+    expect(pixelOf(holder, 0, 0, 0)).toEqual([0, 0, 0, 0]);
+    h.redo();
+    h.redo();
+    h.redo();
+    expect(holder.layers.map((l) => l.id)).toEqual([1, 2, 3]);
+    expect(pixelOf(holder, 0, 0, 0)).toEqual(R);
+    expect(pixelOf(holder, 2, 2, 0)).toEqual(B);
+  });
+
+  it('restores a deleted layer with its pixels', () => {
+    const { holder, h } = two();
+    holder.activeIndex = 1;
+    stroke(h, [5, R]);
+    h.snapshot({ layers: [holder.layers[0]], activeIndex: 0 });
+    h.undo();
+    expect(holder.layers).toHaveLength(2);
+    expect(pixelOf(holder, 1, 1, 1)).toEqual(R);
+  });
+
+  it('keeps current visibility when a snapshot is restored', () => {
+    const { holder, h } = two();
+    h.snapshot({ layers: holder.layers.map((l) => ({ ...l, name: 'x' })), activeIndex: 0 });
+    holder.layers[1].visible = false;
+    h.undo();
+    expect(holder.layers[1].visible).toBe(false);
+    h.redo();
+    expect(holder.layers[1].visible).toBe(false);
   });
 });

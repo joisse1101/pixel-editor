@@ -202,3 +202,37 @@ describe('blit', () => {
     expect(show(dst)).toEqual(['g..', '..b']);
   });
 });
+
+describe('flatten', () => {
+  const layer = (px: Pixels, visible = true) => ({ px, visible });
+  it('shows the top opaque pixel over the bottom one', () => {
+    expect(ops.getPixel(ops.flatten([layer(img('b')), layer(img('r'))]), 0, 0)).toEqual(R);
+  });
+  it('lets transparent pixels show through', () => {
+    const out = ops.flatten([layer(img('gb')), layer(img('.r'))]);
+    expect(show(out)).toEqual(['gr']);
+  });
+  it('composites semi-transparent pixels with known values', () => {
+    const half = ops.createPixels(1, 1);
+    ops.setPixel(half, 0, 0, [255, 0, 0, 128]);
+    // red at 128/255 over opaque blue: 255*a, 255*(1-a)
+    const over = ops.flatten([layer(img('b')), layer(half)]);
+    expect(ops.getPixel(over, 0, 0)).toEqual([128, 0, 127, 255]);
+    // over a transparent pixel the colour and alpha are kept
+    const alone = ops.flatten([layer(img('.')), layer(half)]);
+    expect(ops.getPixel(alone, 0, 0)).toEqual([255, 0, 0, 128]);
+  });
+  it('keeps the exact RGBA of a single layer, including transparent pixels with colour', () => {
+    const px = ops.createPixels(2, 1);
+    ops.setPixel(px, 0, 0, [10, 20, 30, 0]);
+    ops.setPixel(px, 1, 0, [10, 20, 30, 128]);
+    expect(Array.from(ops.flatten([layer(px)]).data)).toEqual(Array.from(px.data));
+  });
+  it('ignores hidden layers and returns a new image', () => {
+    const bottom = img('b');
+    const out = ops.flatten([layer(bottom), layer(img('r'), false)]);
+    expect(show(out)).toEqual(['b']);
+    expect(out).not.toBe(bottom);
+    expect(show(ops.flatten([layer(img('r'), false)]))).toEqual(['.']);
+  });
+});

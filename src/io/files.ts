@@ -31,12 +31,16 @@ export async function pickFile(): Promise<{ handle: FileHandle; text: string } |
   }
 }
 
-/** Shows the native open dialog for an image. Returns null if cancelled. Only call when hasFileAccess(). */
-export async function pickImage(): Promise<{ handle: FileHandle; bytes: Uint8Array; name: string } | null> {
+/** Shows the native open dialog for one or more images, in the order chosen. Returns null if cancelled. Only call when hasFileAccess(). */
+export async function pickImages(): Promise<{ handle: FileHandle; bytes: Uint8Array; name: string }[] | null> {
   try {
-    const [handle] = await picker().showOpenFilePicker!({ types: pngTypes });
-    const file = await handle.getFile();
-    return { handle, bytes: new Uint8Array(await file.arrayBuffer()), name: file.name };
+    const handles = await picker().showOpenFilePicker!({ types: pngTypes, multiple: true });
+    return await Promise.all(
+      handles.map(async (handle) => {
+        const file = await handle.getFile();
+        return { handle, bytes: new Uint8Array(await file.arrayBuffer()), name: file.name };
+      }),
+    );
   } catch (e) {
     if (isAbort(e)) return null;
     throw e;
