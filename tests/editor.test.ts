@@ -255,3 +255,43 @@ describe('tile attributes', () => {
     expect(saved.spriteSheets[sheet.id].attributes).not.toHaveProperty('5');
   });
 });
+
+describe('sheet rename and reorder', () => {
+  it('renames a sheet and rejects an empty name', () => {
+    const e = new Editor(sample());
+    const id = e.project.sheets[0].id;
+    expect(e.renameSheet(id, '  Office tiles ')).toBe(true);
+    expect(e.project.sheets[0].name).toBe('Office tiles');
+    expect(e.renameSheet(id, '   ')).toBe(false);
+    expect(e.project.sheets[0].name).toBe('Office tiles');
+  });
+
+  it('moves a sheet up and down and stops at the edges', () => {
+    const e = new Editor(sample());
+    const ids = e.project.sheets.map((s) => s.id);
+    expect(e.moveSheet(ids[2], -1)).toBe(1);
+    expect(e.project.sheets.map((s) => s.id).slice(0, 3)).toEqual([ids[0], ids[2], ids[1]]);
+    e.dirty = false;
+    expect(e.moveSheet(ids[0], -1)).toBe(0);
+    const last = ids.length - 1;
+    expect(e.moveSheet(e.project.sheets[last].id, 1)).toBe(last);
+    expect(e.dirty).toBe(false);
+  });
+
+  it('keeps the order through save and reload without touching tiles', () => {
+    const e = new Editor(sample());
+    const ids = e.project.sheets.map((s) => s.id);
+    e.moveSheet(ids[2], -1);
+    const out = JSON.parse(JSON.stringify(serializeOfficeJson(e.project)));
+    const again = parseOfficeJson(out);
+    expect(again.sheets.map((s) => s.id).slice(0, 3)).toEqual([ids[0], ids[2], ids[1]]);
+    expect(serializeOfficeJson(again).layers).toEqual(serializeOfficeJson(sample()).layers);
+  });
+
+  it('names an added sheet', () => {
+    const e = new Editor(sample());
+    const url = e.project.sheets[0].dataUrl;
+    expect(e.addSheet(url, 'Imported').sheet.name).toBe('Imported');
+    expect(e.addSheet(url).sheet.name).toBeUndefined();
+  });
+});

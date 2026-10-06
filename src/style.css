@@ -130,13 +130,36 @@ button.active {
   image-rendering: pixelated;
 }
 
-#palette select {
-  width: 100%;
+#palette .palette-top {
+  display: flex;
+  gap: 4px;
   margin-bottom: 6px;
+}
+
+#palette select {
+  flex: 1;
+  min-width: 0;
+}
+
+#palette .palette-zoom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.palette-viewport {
+  width: 320px;
+  height: 320px;
+  overflow: hidden;
+  background: #1e1e24;
 }
 
 #palette canvas {
   display: block;
+  width: 320px;
+  height: 320px;
   image-rendering: pixelated;
   cursor: pointer;
 }
@@ -172,7 +195,29 @@ button.icon.on {
 }
 
 .sheet-actions {
+  flex-wrap: wrap;
   margin: 8px 0;
+}
+
+#attr-dialog {
+  min-width: 360px;
+  padding: 12px 16px;
+  border: 1px solid #55556a;
+  border-radius: 6px;
+  background: #2b2b33;
+  color: inherit;
+}
+
+#attr-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+#attr-dialog h3 {
+  margin: 0 0 4px;
+}
+
+.dialog-actions {
+  margin-top: 10px;
 }
 
 .attr-row {
@@ -196,4 +241,13 @@ button.icon.on {
   margin: 8px 0 0;
   font-size: 11px;
   color: #9a9aab;
+}
+
+.tile-preview {
+  display: block;
+  width: 64px;
+  height: 64px;
+  margin: 8px 0;
+  background: #1e1e24;
+  image-rendering: pixelated;
 }

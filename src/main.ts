@@ -2,11 +2,11 @@ import { Editor, type Brush } from './editor/editor';
 import { applyOrientOp, type OrientOp } from './editor/orientation';
 import { bakeExports, bakeFiles, bakeProject } from './model/bake';
 import { downloadBytes, downloadText, hasFileAccess, pickFile, saveText, type FileHandle } from './io/files';
-import { countTiles, getMapBounds, serializeOfficeJson, tryLoadProject } from './model/office';
+import { countTiles, getMapBounds, serializeOfficeJson, sheetLabel, sheetNameFromFile, tryLoadProject } from './model/office';
 import type { Project } from './model/types';
 import { drawTile, MapView } from './render/mapView';
 import { decodeSheets } from './render/sheets';
-import { Palette } from './ui/palette';
+import { Palette, type PaletteSelection } from './ui/palette';
 import './style.css';
 
 type Tool = 'paint' | 'erase' | 'select';
@@ -66,12 +66,14 @@ app.innerHTML = `
       <div class="group sheet-actions">
         <button id="sheet-import" type="button" title="Add a PNG as a new sprite sheet">Import PNG</button>
         <button id="sheet-delete" type="button" title="Delete the shown sheet (only if unused)">Delete sheet</button>
+        <button id="sheet-rename" type="button" title="Rename the shown sheet">Rename</button>
+        <button id="sheet-up" type="button" title="Move the shown sheet up in the list">&#9650;</button>
+        <button id="sheet-down" type="button" title="Move the shown sheet down in the list">&#9660;</button>
         <input id="sheet-file" type="file" accept="image/png" hidden />
       </div>
-      <h3>Tile attributes</h3>
-      <div id="attrs"></div>
     </aside>
   </div>
+  <dialog id="attr-dialog"></dialog>
 `;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -90,7 +92,6 @@ let activeLayer = 0;
 let tool: Tool = 'paint';
 let brush: Brush = { sheetId: '', id: '0', flipX: false, flipY: false, rotation: 0 };
 let fileName = '';
-let attrKey = '';
 let fileHandle: FileHandle | null = null;
 let pressed = false;
 let lastCell: [number, number] | null = null;
@@ -216,29 +217,43 @@ function refresh(): void {
   $('brush-info').textContent = `${brush.flipX ? 'flipX ' : ''}${brush.flipY ? 'flipY ' : ''}rot ${brush.rotation}`;
   drawBrushPreview();
   renderLayers();
-  renderAttrs();
   view.draw();
 }
 
 const parseValue = (text: string): unknown => (text === 'true' ? true : text === 'false' ? false : text);
 
-/** Attribute editor for the brush tile; attributes belong to the sheet tile, so they apply everywhere it is placed. */
-function renderAttrs(): void {
-  const box = $('attrs');
-  const key = `${brush.sheetId}:${brush.id}`;
-  const sheet = project?.sheets.find((s) => s.id === brush.sheetId);
-  // Skip rebuilding while a field in the editor is being typed in.
-  const typing = document.activeElement;
-  if (typing instanceof HTMLInputElement && box.contains(typing) && attrKey === key) return;
-  attrKey = key;
-  box.replaceChildren();
-  if (!editor || !sheet) return;
+const attrDialog = $<HTMLDialogElement>('attr-dialog');
+/** Saves every row of the open attribute modal; run on close so Escape or a backdrop click keeps typed values. */
+let flushAttrs: () => void = () => {};
+
+/** Fills the modal with an editor for the attributes of one sheet tile; they apply wherever the tile is placed. */
+function renderAttrDialog(sel: PaletteSelection): void {
+  const sheet = project?.sheets.find((s) => s.id === sel.sheetId);
   const ed = editor;
-  const title = document.createElement('p');
-  title.className = 'hint';
-  title.textContent = `Tile ${brush.id}`;
-  box.append(title);
-  for (const attr of sheet.attributes[brush.id] ?? []) {
+  if (!ed || !project || !sheet) {
+    attrDialog.close();
+    return;
+  }
+  const savers: (() => void)[] = [];
+  flushAttrs = () => savers.forEach((f) => f());
+
+  const title = document.createElement('h3');
+  title.textContent = 'Edit tile attributes';
+  const sub = document.createElement('p');
+  sub.className = 'hint';
+  sub.textContent = `${sheetLabel(project, project.sheets.indexOf(sheet))} · tile ${sel.id}`;
+  const preview = document.createElement('canvas');
+  preview.className = 'tile-preview';
+  preview.width = preview.height = 64;
+  const cols = Math.floor(sheet.width / project.tileSize);
+  const ts = project.tileSize;
+  const pctx = preview.getContext('2d')!;
+  pctx.imageSmoothingEnabled = false;
+  if (sheet.bitmap) {
+    pctx.drawImage(sheet.bitmap, (Number(sel.id) % cols) * ts, Math.floor(Number(sel.id) / cols) * ts, ts, ts, 0, 0, 64, 64);
+  }
+  const rows = document.createElement('div');
+  for (const attr of sheet.attributes[sel.id] ?? []) {
     const row = document.createElement('div');
     row.className = 'attr-row';
     const k = document.createElement('input');
@@ -248,10 +263,12 @@ function renderAttrs(): void {
     v.value = String(attr.value);
     v.placeholder = 'value';
     const save = () => {
-      if (!k.value.trim()) return;
-      ed.updateAttribute(sheet.id, brush.id, attr.id, k.value.trim(), parseValue(v.value));
-      updateTitle();
+      const key = k.value.trim();
+      const value = parseValue(v.value);
+      if (!key || (key === attr.key && value === attr.value)) return;
+      ed.updateAttribute(sheet.id, sel.id, attr.id, key, value);
     };
+    savers.push(save);
     k.addEventListener('change', save);
     v.addEventListener('change', save);
     const del = document.createElement('button');
@@ -260,22 +277,46 @@ function renderAttrs(): void {
     del.title = 'Remove attribute';
     del.textContent = '×';
     del.addEventListener('click', () => {
-      ed.removeAttribute(sheet.id, brush.id, attr.id);
-      refresh();
+      ed.removeAttribute(sheet.id, sel.id, attr.id);
+      renderAttrDialog(sel);
     });
     row.append(k, v, del);
-    box.append(row);
+    rows.append(row);
   }
   const add = document.createElement('button');
   add.type = 'button';
   add.textContent = 'Add attribute';
   add.addEventListener('click', () => {
-    ed.addAttribute(sheet.id, brush.id, 'interaction', '');
-    refresh();
-    box.querySelector<HTMLInputElement>('.attr-row:last-of-type input')?.focus();
+    flushAttrs();
+    ed.addAttribute(sheet.id, sel.id, 'interaction', '');
+    renderAttrDialog(sel);
+    attrDialog.querySelector<HTMLInputElement>('.attr-row:last-of-type input')?.focus();
   });
-  box.append(add);
+  const done = document.createElement('button');
+  done.type = 'button';
+  done.textContent = 'Done';
+  done.addEventListener('click', () => attrDialog.close());
+  const actions = document.createElement('div');
+  actions.className = 'group dialog-actions';
+  actions.append(add, done);
+  attrDialog.replaceChildren(title, sub, preview, rows, actions);
 }
+
+function openAttrDialog(sel: PaletteSelection): void {
+  if (!editor) return;
+  renderAttrDialog(sel);
+  if (!attrDialog.open) attrDialog.showModal();
+}
+
+attrDialog.addEventListener('close', () => {
+  flushAttrs();
+  flushAttrs = () => {};
+  attrDialog.replaceChildren();
+});
+attrDialog.addEventListener('click', (e) => {
+  if (e.target === attrDialog) attrDialog.close();
+});
+palette.onConfigure = openAttrDialog;
 
 function renderLayers(): void {
   const ul = $('layers');
@@ -361,7 +402,6 @@ async function loadText(text: string, name: string, handle: FileHandle | null): 
   brush = { sheetId: first?.id ?? '', id: '0', flipX: false, flipY: false, rotation: 0 };
   status.textContent = `${name} - ${project.layers.length} layers, ${countTiles(project)} tiles, ${project.sheets.length} sheets`;
   palette.setProject(project);
-  palette.setSelected({ sheetId: brush.sheetId, id: brush.id });
   view.setProject(project);
   setTool('paint');
   $('zoom').textContent = `Zoom ${view.zoomLabel()}`;
@@ -491,7 +531,7 @@ $('sheet-file').addEventListener('change', async (e) => {
       r.onerror = () => reject(r.error);
       r.readAsDataURL(file);
     });
-    const { sheet, partial } = editor.addSheet(dataUrl);
+    const { sheet, partial } = editor.addSheet(dataUrl, sheetNameFromFile(file.name));
     await decodeSheets(project);
     palette.reload(project.sheets.length - 1);
     status.classList.remove('error');
@@ -519,10 +559,29 @@ $('sheet-delete').addEventListener('click', () => {
   if (brush.sheetId === id) {
     brush = { ...brush, sheetId: project.sheets[0]?.id ?? '', id: '0' };
   }
+  // reload clears the palette selection when it was on the deleted sheet, which disables the gear.
   palette.reload(Math.min(index, project.sheets.length - 1));
-  palette.setSelected({ sheetId: brush.sheetId, id: brush.id });
   refresh();
 });
+$('sheet-rename').addEventListener('click', () => {
+  if (!editor || !project) return;
+  const index = palette.currentIndex();
+  const sheet = project.sheets[index];
+  if (!sheet) return;
+  const name = prompt('Sheet name', sheet.name ?? `Sheet ${index + 1}`);
+  if (name === null || !editor.renameSheet(sheet.id, name)) return;
+  palette.reload(index);
+  refresh();
+});
+function moveSheet(delta: number): void {
+  if (!editor) return;
+  const id = palette.currentSheetId();
+  if (!id) return;
+  palette.reload(editor.moveSheet(id, delta));
+  refresh();
+}
+$('sheet-up').addEventListener('click', () => moveSheet(-1));
+$('sheet-down').addEventListener('click', () => moveSheet(1));
 $('layer-up').addEventListener('click', () => moveActiveLayer(-1));
 $('layer-down').addEventListener('click', () => moveActiveLayer(1));
 $('undo').addEventListener('click', undo);

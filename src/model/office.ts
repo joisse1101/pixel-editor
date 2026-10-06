@@ -56,14 +56,16 @@ export function parseOfficeJson(input: string | unknown): Project {
     } catch (e) {
       throw new ProjectParseError(`Sprite sheet ${id}: ${(e as Error).message}`);
     }
-    return {
+    const sheet: SpriteSheet = {
       id,
       dataUrl: s.base64,
       width: size.width,
       height: size.height,
       attributes: (s.attributes ?? {}) as Record<string, Attribute[]>,
-      extra: omit(s, ['base64', 'attributes']),
+      extra: omit(s, ['base64', 'attributes', 'name']),
     };
+    if (typeof s.name === 'string' && s.name !== '') sheet.name = s.name;
+    return sheet;
   });
   const sheetIds = new Set(sheets.map((s) => s.id));
 
@@ -134,7 +136,7 @@ export function parseOfficeJson(input: string | unknown): Project {
 export function serializeOfficeJson(p: Project): Record<string, unknown> {
   const spriteSheets: Record<string, unknown> = {};
   for (const s of p.sheets) {
-    spriteSheets[s.id] = { base64: s.dataUrl, attributes: s.attributes, ...s.extra };
+    spriteSheets[s.id] = { base64: s.dataUrl, attributes: s.attributes, ...(s.name ? { name: s.name } : {}), ...s.extra };
   }
   const layers = p.layers.map((l) => {
     const tiles = [...l.cells].map(([key, t]) => {
@@ -175,6 +177,20 @@ export function serializeOfficeJson(p: Project): Record<string, unknown> {
     exports: p.exports,
     ...p.extra,
   };
+}
+
+/** Selector label: `<name> (<cols>x<rows>)`, with `Sheet <n>` when the sheet has no name. */
+export function sheetLabel(p: Project, index: number): string {
+  const s = p.sheets[index];
+  const cols = Math.floor(s.width / p.tileSize);
+  const rows = Math.floor(s.height / p.tileSize);
+  return `${s.name || `Sheet ${index + 1}`} (${cols}x${rows})`;
+}
+
+/** File name without its last extension, used to name an imported sheet. */
+export function sheetNameFromFile(fileName: string): string {
+  const dot = fileName.lastIndexOf('.');
+  return dot > 0 ? fileName.slice(0, dot) : fileName;
 }
 
 export interface MapBounds {

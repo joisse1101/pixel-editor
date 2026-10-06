@@ -42,7 +42,7 @@ The system SHALL let the user rename any sprite sheet after import. The new name
 - **THEN** the sheet keeps its previous name
 
 ### Requirement: Zoom palette
-The system SHALL let the user zoom the sheet viewport in whole steps from 1x to 8x with Ctrl plus the mouse wheel and with zoom buttons. Tile picking and the selection highlight SHALL stay aligned with the tiles at every zoom level.
+The system SHALL let the user zoom the sheet viewport in steps from 0.125x to 8x (0.125, 0.25, 0.5, 1 and whole numbers up to 8) with Ctrl plus the mouse wheel and with zoom buttons. Tile picking and the selection highlight SHALL stay aligned with the tiles at every zoom level.
 
 #### Scenario: Zoom and pick
 - **WHEN** the user zooms to 4x and clicks a tile
@@ -64,7 +64,7 @@ The system SHALL let the user move a sheet up or down in the sheet list. The ord
 - **THEN** the map looks the same as before
 
 ### Requirement: Tile attributes modal
-The system SHALL provide a configure button next to the sheet selector that is enabled only while a tile is selected. Activating it SHALL open an "Edit tile attributes" modal in which attributes of the selected tile can be added, edited and removed. Edits SHALL NOT be lost when the modal is closed by any means.
+The system SHALL provide a configure button next to the sheet selector that is enabled only while a tile is selected. Activating it SHALL open an "Edit tile attributes" modal that shows a preview of the selected tile and in which attributes of the selected tile can be added, edited and removed. Edits SHALL NOT be lost when the modal is closed by any means.
 
 #### Scenario: Nothing selected
 - **WHEN** no tile is selected (for example right after opening a project)

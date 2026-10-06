@@ -38,6 +38,8 @@ export interface Layer {
 
 export interface SpriteSheet {
   id: string;
+  /** Display name (imported file name without extension); saved as `name`, optional. */
+  name?: string;
   /** PNG data URL, written back untouched unless the sheet changes. */
   dataUrl: string;
   width: number;

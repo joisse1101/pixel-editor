@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countTiles, getMapBounds, parseOfficeJson, serializeOfficeJson, tryLoadProject } from '../src/model/office';
+import { countTiles, getMapBounds, parseOfficeJson, serializeOfficeJson, sheetLabel, sheetNameFromFile, tryLoadProject } from '../src/model/office';
 import { loadOfficeJson } from './fixtures';
 
 describe('Office.json model', () => {
@@ -87,5 +87,39 @@ describe('Office.json model', () => {
     expect(out.settings.mapSize).toBeUndefined();
     expect(out.settings.mapOrigin).toBeUndefined();
     expect(getMapBounds(p)).toEqual({ x: 21, y: 4, width: 40, height: 26 });
+  });
+});
+
+describe('sheet names', () => {
+  it('round-trips a sheet name without duplicating it in extra', () => {
+    const p = parseOfficeJson(loadOfficeJson());
+    p.sheets[0].name = 'Office tiles';
+    const out: any = JSON.parse(JSON.stringify(serializeOfficeJson(p)));
+    expect(out.spriteSheets[p.sheets[0].id].name).toBe('Office tiles');
+    const again = parseOfficeJson(out);
+    expect(again.sheets[0].name).toBe('Office tiles');
+    expect(again.sheets[0].extra.name).toBeUndefined();
+    expect(JSON.stringify(serializeOfficeJson(again))).toBe(JSON.stringify(out));
+  });
+
+  it('saves a sheet without a name without a name field', () => {
+    const p = parseOfficeJson(loadOfficeJson());
+    const out: any = serializeOfficeJson(p);
+    expect('name' in out.spriteSheets[p.sheets[0].id]).toBe(false);
+  });
+
+  it('labels sheets as <name> (<cols>x<rows>) with a Sheet N fallback', () => {
+    const p = parseOfficeJson(loadOfficeJson());
+    const s = p.sheets[1];
+    const size = `${Math.floor(s.width / p.tileSize)}x${Math.floor(s.height / p.tileSize)}`;
+    expect(sheetLabel(p, 1)).toBe(`Sheet 2 (${size})`);
+    s.name = 'SpriteSheet';
+    expect(sheetLabel(p, 1)).toBe(`SpriteSheet (${size})`);
+  });
+
+  it('names an imported file after its name without the last extension', () => {
+    expect(sheetNameFromFile('SpriteSheet.png')).toBe('SpriteSheet');
+    expect(sheetNameFromFile('a.b.png')).toBe('a.b');
+    expect(sheetNameFromFile('noext')).toBe('noext');
   });
 });

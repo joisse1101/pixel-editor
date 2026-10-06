@@ -164,14 +164,38 @@ export class Editor {
   }
 
   /** Adds a PNG (data URL) as a new sheet. `partial` is true when edge pixels don't fill a whole tile. */
-  addSheet(dataUrl: string): { sheet: SpriteSheet; partial: boolean } {
+  addSheet(dataUrl: string, name?: string): { sheet: SpriteSheet; partial: boolean } {
     const { width, height } = pngSizeFromDataUrl(dataUrl);
     const ts = this.project.tileSize;
     if (width < ts || height < ts) throw new Error(`Image is smaller than one ${ts}x${ts} tile`);
     const sheet: SpriteSheet = { id: crypto.randomUUID(), dataUrl, width, height, attributes: {}, extra: {} };
+    if (name) sheet.name = name;
     this.project.sheets.push(sheet);
     this.structureChanged();
     return { sheet, partial: width % ts !== 0 || height % ts !== 0 };
+  }
+
+  /** Renames a sheet. An empty (or blank) name is rejected and returns false. */
+  renameSheet(sheetId: string, name: string): boolean {
+    const trimmed = name.trim();
+    const sheet = this.project.sheets.find((s) => s.id === sheetId);
+    if (!sheet) throw new Error(`Unknown sheet ${sheetId}`);
+    if (!trimmed) return false;
+    sheet.name = trimmed;
+    this.structureChanged();
+    return true;
+  }
+
+  /** Moves a sheet by `delta` positions in the list. Returns its new index (unchanged at the edges). */
+  moveSheet(sheetId: string, delta: number): number {
+    const sheets = this.project.sheets;
+    const from = sheets.findIndex((s) => s.id === sheetId);
+    if (from < 0) throw new Error(`Unknown sheet ${sheetId}`);
+    const to = from + delta;
+    if (delta === 0 || to < 0 || to >= sheets.length) return from;
+    sheets.splice(to, 0, ...sheets.splice(from, 1));
+    this.structureChanged();
+    return to;
   }
 
   /** Number of placed tiles that use the sheet. */
