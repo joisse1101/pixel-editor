@@ -3,10 +3,9 @@ import { mountNav } from '../ui/nav';
 import { ColorState, toHex } from './colors';
 import { PixelDocument } from './document';
 import { decodeImageFile, encodeImageFile } from './pngFile';
+import { ToolController, type Tool } from './tools';
 import { PixelView } from './view';
 import '../style.css';
-
-export type Tool = 'pencil' | 'eraser' | 'eyedropper' | 'fill' | 'line' | 'rect' | 'select';
 
 const TOOLS: { id: Tool; label: string; key: string }[] = [
   { id: 'pencil', label: 'Pencil', key: 'P' },
@@ -48,6 +47,7 @@ app.insertAdjacentHTML(
   <div class="main">
     <aside class="px-tools panel">
       <div id="tools" class="px-tool-list"></div>
+      <label class="px-opt"><input id="filled" type="checkbox" /> Filled rectangle</label>
       <h3>Colour</h3>
       <div class="px-color">
         <input id="color" type="color" value="#000000" title="Colour" />
@@ -73,7 +73,8 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const doc = new PixelDocument();
 const colors = new ColorState();
 const view = new PixelView($<HTMLCanvasElement>('px-canvas'), doc);
-let tool: Tool = 'pencil';
+const tools = new ToolController(doc, view, colors, () => refreshColor());
+view.handlers = tools;
 let handle: FileHandle | null = null;
 let fileName = 'untitled.png';
 
@@ -126,10 +127,10 @@ for (const t of TOOLS) {
 }
 
 function setTool(t: Tool): void {
-  tool = t;
+  tools.tool = t;
   for (const b of toolList.querySelectorAll('button')) b.classList.toggle('active', b.dataset.tool === t);
 }
-setTool(tool);
+setTool(tools.tool);
 
 // ---- Colour ----
 
@@ -236,6 +237,12 @@ $<HTMLInputElement>('grid').addEventListener('change', (e) => {
   view.showGrid = (e.target as HTMLInputElement).checked;
   view.redraw();
 });
+$<HTMLInputElement>('filled').addEventListener('change', (e) => {
+  tools.filled = (e.target as HTMLInputElement).checked;
+});
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') tools.cancelDrag();
+});
 $('px-canvas').addEventListener('wheel', () => requestAnimationFrame(refreshStatus), { passive: true });
 
 view.fit();
@@ -243,4 +250,4 @@ refreshStatus();
 
 // Exposed to the tool and shortcut code added alongside this shell.
 export { doc, view, colors, message, refreshColor, refreshStatus, setTool, openImage, saveImage, confirmDiscard };
-export const currentTool = (): Tool => tool;
+export const currentTool = (): Tool => tools.tool;

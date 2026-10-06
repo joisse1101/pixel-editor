@@ -470,6 +470,11 @@ button.icon.on {
 .status-row span + span {
   margin-left: 16px;
 }
+.px-opt {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+}
 .px-msg.error {
   color: #ff8a8a;
 }
