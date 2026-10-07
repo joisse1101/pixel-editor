@@ -159,6 +159,15 @@ describe('layer management', () => {
     expect(again.layers.map((l) => l.name)).toEqual(names(e));
   });
 
+  it('moves a layer across several positions in one call', () => {
+    const e = new Editor(sample());
+    const before = names(e);
+    e.moveLayer(0, before.length - 1);
+    expect(names(e)).toEqual([...before.slice(1), before[0]]);
+    e.moveLayer(before.length - 1, 0);
+    expect(names(e)).toEqual(before);
+  });
+
   it('toggles the collider flag and writes it to the file', () => {
     const e = new Editor(sample());
     const was = e.project.layers[1].collider;
