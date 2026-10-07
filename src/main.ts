@@ -829,16 +829,18 @@ $('rot-cw').addEventListener('click', () => orient('rotateCW'));
 $('rot-ccw').addEventListener('click', () => orient('rotateCCW'));
 $('layer-add').addEventListener('click', () => {
   if (!editor) return;
-  const name = prompt('New layer name', 'New layer');
-  if (!name) return;
-  editor.addLayer(activeLayer, name);
+  editor.addLayer(activeLayer, editor.nextLayerName());
   refresh();
 });
 $('layer-rename').addEventListener('click', () => {
   if (!editor || !project) return;
   const name = prompt('Layer name', project.layers[activeLayer].name);
-  if (!name) return;
-  editor.renameLayer(activeLayer, name);
+  if (!name?.trim()) return;
+  if (editor.layerNameTaken(name, activeLayer)) {
+    alert(`A layer named "${name.trim()}" already exists. Layer names must be unique.`);
+    return;
+  }
+  editor.renameLayer(activeLayer, name.trim());
   refresh();
 });
 $('layer-delete').addEventListener('click', () => {

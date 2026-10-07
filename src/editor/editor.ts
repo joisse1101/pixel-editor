@@ -210,6 +210,19 @@ export class Editor {
     this.onChange();
   }
 
+  /** True when another layer (not `except`) already uses `name`, ignoring case and surrounding spaces. */
+  layerNameTaken(name: string, except = -1): boolean {
+    const key = name.trim().toLowerCase();
+    return this.project.layers.some((l, i) => i !== except && l.name.trim().toLowerCase() === key);
+  }
+
+  /** The next free "Layer N", counting from the number of layers plus one. */
+  nextLayerName(): string {
+    let n = this.project.layers.length + 1;
+    while (this.layerNameTaken(`Layer ${n}`)) n++;
+    return `Layer ${n}`;
+  }
+
   /** Inserts a new empty layer at `index` in file order (0 = top of the stack). */
   addLayer(index: number, name: string): Layer {
     const layer: Layer = {
