@@ -542,7 +542,8 @@ button.icon.on {
 .px-layer.hidden .px-layer-name {
   opacity: 0.5;
 }
-.px-eye {
+.px-eye,
+.px-layer-save {
   display: inline-flex;
   padding: 2px 4px;
   border: none;

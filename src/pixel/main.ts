@@ -4,6 +4,8 @@ import { ColorState, toHex } from './colors';
 import { PixelDocument } from './document';
 import { parseGridLevels } from './gridLevels';
 import { LayerPanel } from './layerPanel';
+import { saveAllowed, saveLayerFile } from './layerFile';
+import type { Layer } from './history';
 import type { Pixels } from '../model/pngCodec';
 import { flatten } from './ops';
 import { decodeImageFile, encodeImageFile } from './pngFile';
@@ -164,6 +166,7 @@ function refreshStatus(): void {
   $('px-zoom').textContent = `${Math.round(view.viewport.scale * 100)}%`;
   $<HTMLButtonElement>('undo').disabled = !doc.history.canUndo;
   $<HTMLButtonElement>('redo').disabled = !doc.history.canRedo;
+  $<HTMLButtonElement>('save').disabled = !saveAllowed(doc.layers, handle, handleIsSource);
 }
 
 function refreshHover(): void {
@@ -177,7 +180,7 @@ function refreshHover(): void {
   $('px-hover').textContent = `${p.x}, ${p.y}  rgba(${d[i]}, ${d[i + 1]}, ${d[i + 2]}, ${d[i + 3]})`;
 }
 
-const layerPanel = new LayerPanel($('px-layers'), doc);
+const layerPanel = new LayerPanel($('px-layers'), doc, (i) => void saveLayer(i));
 view.onHover = refreshHover;
 doc.onChange = () => {
   view.invalidate();
@@ -260,11 +263,15 @@ interface PickedImage {
  * overwrite it when it is the only one.
  */
 async function importImages(files: PickedImage[]): Promise<void> {
-  const images: { name: string; px: Pixels }[] = [];
+  const images: { name: string; px: Pixels; source?: Layer['source'] }[] = [];
   const errors: string[] = [];
   for (const f of files) {
     try {
-      images.push({ name: layerName(f.name), px: await decodeImageFile(f.bytes) });
+      images.push({
+        name: layerName(f.name),
+        px: await decodeImageFile(f.bytes),
+        source: f.handle ? { handle: f.handle, name: f.name } : undefined,
+      });
     } catch (e) {
       errors.push(`Could not open ${f.name}: ${(e as Error).message}`);
     }
@@ -325,9 +332,22 @@ async function saveImage(saveAs: boolean): Promise<void> {
     handleIsSource = false;
     fileName = saved.name;
     doc.markSaved();
+    refreshStatus();
     message(`Saved ${saved.name}`);
   } catch (e) {
     message(`Could not save: ${(e as Error).message}`, true);
+  }
+}
+
+/** Saves one linked layer, alone and at full opacity, to the file it was imported from. */
+async function saveLayer(index: number): Promise<void> {
+  const layer = doc.layers[index];
+  if (!layer?.source) return;
+  try {
+    if (index === doc.activeIndex) doc.commitFloating();
+    message(`Saved ${await saveLayerFile(layer)}`);
+  } catch (e) {
+    message(`Could not save ${layer.source.name}: ${(e as Error).message}`, true);
   }
 }
 
@@ -421,7 +441,9 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     if (key === 'z') (e.shiftKey ? doc.redo() : doc.undo());
     else if (key === 'y') doc.redo();
-    else if (key === 's') void saveImage(e.shiftKey);
+    else if (key === 's') {
+      if (e.shiftKey || saveAllowed(doc.layers, handle, handleIsSource)) void saveImage(e.shiftKey);
+    }
     else if (key === 'o') void openImage();
     else void newImage();
     return;

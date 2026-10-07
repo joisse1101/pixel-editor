@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { FileHandle } from '../src/io/files';
 import { PixelDocument } from '../src/pixel/document';
 import { createPixels, getPixel, setPixel, type Rgba } from '../src/pixel/ops';
 
@@ -333,5 +334,67 @@ describe('PixelDocument addLayers', () => {
     expect(() => d.addLayers([{ name: 'huge', px: createPixels(5000, 1) }])).toThrow();
     expect(d.layers).toHaveLength(1);
     expect(d.history.canUndo).toBe(false);
+  });
+});
+
+describe('PixelDocument layer source link', () => {
+  const handle = { createWritable: async () => ({ write: async () => {}, close: async () => {} }) } as unknown as FileHandle;
+  const link = (name: string) => ({ handle, name });
+  const sourceNames = (d: PixelDocument) => d.layers.map((l) => l.source?.name);
+
+  function linked(): PixelDocument {
+    const d = new PixelDocument(4, 4);
+    d.addLayers([
+      { name: 'a', px: solid(4, 4, R), source: link('a.png') },
+      { name: 'b', px: solid(4, 4, B), source: link('b.png') },
+    ]);
+    return d;
+  }
+
+  it('stores the source per imported layer and leaves others unlinked', () => {
+    const d = new PixelDocument(4, 4);
+    d.addLayers([{ name: 'x', px: solid(4, 4, R) }]);
+    d.addLayers([{ name: 'a', px: solid(4, 4, B), source: link('a.png') }]);
+    expect(sourceNames(d)).toEqual([undefined, 'a.png']);
+    d.addLayer();
+    expect(sourceNames(d)).toEqual([undefined, 'a.png', undefined]);
+  });
+
+  it('keeps the link through rename, move, canvas resize, and undo/redo', () => {
+    const d = linked();
+    d.renameLayer(0, 'renamed');
+    expect(sourceNames(d)).toEqual(['a.png', 'b.png']);
+    d.moveLayer(0, 1);
+    expect(sourceNames(d)).toEqual(['b.png', 'a.png']);
+    d.resize(6, 6, { ax: 0, ay: 0 });
+    expect(sourceNames(d)).toEqual(['b.png', 'a.png']);
+    d.undo();
+    d.undo();
+    d.undo();
+    expect(sourceNames(d)).toEqual(['a.png', 'b.png']);
+    d.redo();
+    d.redo();
+    d.redo();
+    expect(sourceNames(d)).toEqual(['b.png', 'a.png']);
+  });
+
+  it('keeps the link when a grown canvas pads the layers', () => {
+    const d = linked();
+    d.addLayers([{ name: 'big', px: solid(8, 8, R) }]);
+    expect(sourceNames(d)).toEqual(['a.png', 'b.png', undefined]);
+  });
+
+  it('returns the link with an undone delete', () => {
+    const d = linked();
+    d.deleteLayer(0);
+    expect(sourceNames(d)).toEqual(['b.png']);
+    d.undo();
+    expect(sourceNames(d)).toEqual(['a.png', 'b.png']);
+  });
+
+  it('does not copy the link to a duplicate', () => {
+    const d = linked();
+    d.duplicateLayer();
+    expect(sourceNames(d)).toEqual(['a.png', 'b.png', undefined]);
   });
 });
