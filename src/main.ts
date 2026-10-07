@@ -9,6 +9,7 @@ import { drawTile, MapView } from './render/mapView';
 import { decodeSheets } from './render/sheets';
 import { Palette, type PaletteSelection } from './ui/palette';
 import { mountNav } from './ui/nav';
+import { enableDragReorder, slotToPosition } from './ui/dragReorder';
 import './style.css';
 
 const app = document.getElementById('app')!;
@@ -95,8 +96,6 @@ app.innerHTML = `
       <h3>Layers</h3>
       <div class="group layer-actions">
         <button id="layer-add" type="button" title="Add layer above the selected one">+</button>
-        <button id="layer-up" type="button" title="Move up">&#9650;</button>
-        <button id="layer-down" type="button" title="Move down">&#9660;</button>
         <button id="layer-rename" type="button" title="Rename">Rename</button>
         <button id="layer-delete" type="button" title="Delete layer">Delete</button>
       </div>
@@ -571,6 +570,7 @@ function renderLayers(): void {
       refresh();
     });
 
+    li.draggable = true;
     li.append(eye, name, col);
     li.addEventListener('click', () => {
       activeLayer = i;
@@ -587,12 +587,13 @@ function renderLayers(): void {
   });
 }
 
-function moveActiveLayer(delta: number): void {
-  if (!editor) return;
-  const to = activeLayer + delta;
-  if (to < 0 || to >= editor.project.layers.length) return;
-  editor.moveLayer(activeLayer, to);
-  activeLayer = to;
+/** Drops layer row `from` on `slot` (a gap between rows); the active layer stays the same layer. */
+function reorderLayers(from: number, slot: number): void {
+  const to = slotToPosition(from, slot);
+  if (!editor || to === null) return;
+  const active = editor.project.layers[activeLayer];
+  editor.moveLayer(from, to);
+  activeLayer = editor.project.layers.indexOf(active);
   refresh();
 }
 
@@ -828,16 +829,18 @@ $('rot-cw').addEventListener('click', () => orient('rotateCW'));
 $('rot-ccw').addEventListener('click', () => orient('rotateCCW'));
 $('layer-add').addEventListener('click', () => {
   if (!editor) return;
-  const name = prompt('New layer name', 'New layer');
-  if (!name) return;
-  editor.addLayer(activeLayer, name);
+  editor.addLayer(activeLayer, editor.nextLayerName());
   refresh();
 });
 $('layer-rename').addEventListener('click', () => {
   if (!editor || !project) return;
   const name = prompt('Layer name', project.layers[activeLayer].name);
-  if (!name) return;
-  editor.renameLayer(activeLayer, name);
+  if (!name?.trim()) return;
+  if (editor.layerNameTaken(name, activeLayer)) {
+    alert(`A layer named "${name.trim()}" already exists. Layer names must be unique.`);
+    return;
+  }
+  editor.renameLayer(activeLayer, name.trim());
   refresh();
 });
 $('layer-delete').addEventListener('click', () => {
@@ -912,8 +915,7 @@ function moveSheet(delta: number): void {
 }
 $('sheet-up').addEventListener('click', () => moveSheet(-1));
 $('sheet-down').addEventListener('click', () => moveSheet(1));
-$('layer-up').addEventListener('click', () => moveActiveLayer(-1));
-$('layer-down').addEventListener('click', () => moveActiveLayer(1));
+enableDragReorder($('layers'), reorderLayers);
 $('undo').addEventListener('click', undo);
 $('redo').addEventListener('click', redo);
 

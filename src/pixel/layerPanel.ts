@@ -1,3 +1,4 @@
+import { enableDragReorder, slotToPosition } from '../ui/dragReorder';
 import type { PixelDocument } from './document';
 
 const EYE_OPEN =
@@ -9,8 +10,6 @@ const ACTIONS = [
   { id: 'add', label: 'Add', title: 'Add a transparent layer above the active one' },
   { id: 'dup', label: 'Duplicate', title: 'Duplicate the active layer' },
   { id: 'del', label: 'Delete', title: 'Delete the active layer' },
-  { id: 'up', label: 'Up', title: 'Move the active layer up' },
-  { id: 'down', label: 'Down', title: 'Move the active layer down' },
 ] as const;
 
 /**
@@ -37,6 +36,13 @@ export class LayerPanel {
       b.addEventListener('click', () => this.run(a.id));
       actions.append(b);
     }
+    // Rows are listed top of the stack first, so visual position p is array index length - 1 - p.
+    enableDragReorder(this.list, (from, slot) => {
+      const to = slotToPosition(from, slot);
+      if (to === null) return;
+      const last = this.doc.layers.length - 1;
+      this.doc.moveLayer(last - from, last - to);
+    });
     this.refresh();
   }
 
@@ -44,8 +50,6 @@ export class LayerPanel {
     const d = this.doc;
     if (action === 'add') d.addLayer();
     else if (action === 'dup') d.duplicateLayer();
-    else if (action === 'up') d.moveLayer(d.activeIndex, 1);
-    else if (action === 'down') d.moveLayer(d.activeIndex, -1);
     else if (!d.isLayerEmpty(d.activeIndex) && !window.confirm(`Delete "${d.activeLayer.name}"? Undo can restore it.`)) return;
     else d.deleteLayer();
   }
@@ -57,8 +61,7 @@ export class LayerPanel {
     const actions = this.list.parentElement!.querySelectorAll<HTMLButtonElement>('.px-layer-actions button');
     for (const b of actions) {
       const id = b.dataset.action;
-      b.disabled =
-        (id === 'del' && layers.length <= 1) || (id === 'up' && activeIndex >= layers.length - 1) || (id === 'down' && activeIndex <= 0);
+      b.disabled = id === 'del' && layers.length <= 1;
     }
     if (key === this.shown) return;
     this.shown = key;
@@ -70,6 +73,7 @@ export class LayerPanel {
     const row = document.createElement('div');
     row.className = 'px-layer';
     row.role = 'option';
+    row.draggable = true;
     row.classList.toggle('active', i === this.doc.activeIndex);
     row.classList.toggle('hidden', !layer.visible);
     row.ariaSelected = String(i === this.doc.activeIndex);
@@ -117,6 +121,8 @@ export class LayerPanel {
     input.addEventListener('blur', () => finish(true));
     input.addEventListener('click', (e) => e.stopPropagation());
     input.addEventListener('dblclick', (e) => e.stopPropagation());
+    const row = label.parentElement;
+    if (row) row.draggable = false; // so selecting text in the input does not drag the row
     label.replaceWith(input);
     input.focus();
     input.select();

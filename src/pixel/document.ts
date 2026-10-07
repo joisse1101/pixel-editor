@@ -182,13 +182,13 @@ export class PixelDocument implements ImageHolder {
     return true;
   }
 
-  /** Moves a layer one place up (+1) or down (-1) the stack; the active layer stays active. */
-  moveLayer(index: number, dir: 1 | -1): boolean {
-    const to = index + dir;
-    if (index < 0 || index >= this.layers.length || to < 0 || to >= this.layers.length) return false;
+  /** Moves a layer from one stack position to another as one step; the active layer stays active. */
+  moveLayer(from: number, to: number): boolean {
+    const n = this.layers.length;
+    if (from === to || from < 0 || to < 0 || from >= n || to >= n) return false;
     const active = this.activeLayer;
     const layers = this.layers.slice();
-    [layers[index], layers[to]] = [layers[to], layers[index]];
+    layers.splice(to, 0, ...layers.splice(from, 1));
     this.structure(layers, layers.indexOf(active));
     return true;
   }

@@ -125,15 +125,40 @@ describe('PixelDocument layers', () => {
     expect(d.renameLayer(1, '   ')).toBe(false);
     d.undo();
     expect(names(d)).toEqual(['a', 'b', 'c']);
-    expect(d.moveLayer(1, 1)).toBe(true);
+    expect(d.moveLayer(1, 2)).toBe(true);
     expect(names(d)).toEqual(['a', 'c', 'b']);
     expect(d.activeLayer.name).toBe('b');
-    expect(d.moveLayer(2, 1)).toBe(false);
+    expect(d.moveLayer(2, 2)).toBe(false);
+    expect(d.moveLayer(2, 3)).toBe(false);
     d.undo();
     expect(names(d)).toEqual(['a', 'b', 'c']);
     expect(d.activeLayer.name).toBe('b');
     d.redo();
     expect(names(d)).toEqual(['a', 'c', 'b']);
+  });
+
+  it('moves a layer across several positions as one undo step', () => {
+    const d = threeLayers();
+    d.addLayer();
+    d.renameLayer(d.activeIndex, 'd');
+    d.setActive(1);
+    expect(names(d)).toEqual(['a', 'b', 'c', 'd']);
+    expect(d.moveLayer(0, 3)).toBe(true);
+    expect(names(d)).toEqual(['b', 'c', 'd', 'a']);
+    expect(d.activeLayer.name).toBe('b');
+    expect(d.moveLayer(3, 0)).toBe(true);
+    expect(names(d)).toEqual(['a', 'b', 'c', 'd']);
+    d.moveLayer(0, 3);
+    d.undo();
+    expect(names(d)).toEqual(['a', 'b', 'c', 'd']);
+    expect(d.activeLayer.name).toBe('b');
+  });
+
+  it('moving a layer in place records no undo step', () => {
+    const d = threeLayers();
+    expect(d.moveLayer(1, 1)).toBe(false);
+    expect(d.history.canUndo).toBe(false);
+    expect(names(d)).toEqual(['a', 'b', 'c']);
   });
 
   it('duplicates the active layer above it with independent pixels', () => {
