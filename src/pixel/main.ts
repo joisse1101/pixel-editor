@@ -87,7 +87,7 @@ app.insertAdjacentHTML(
         <h4>Layers</h4>
         <dl>
           <dt><kbd>Open</kbd></dt><dd>Pick several PNGs to add each as a layer</dd>
-          <dt><kbd>Eye</kbd></dt><dd>Show / hide a layer</dd>
+          <dt><kbd>Eye</kbd></dt><dd>Cycle a layer: visible / 50% (not exported) / hidden</dd>
           <dt><kbd>Double-click name</kbd></dt><dd>Rename a layer</dd>
           <dt><kbd>Ctrl + C, pick a layer, Ctrl + V</kbd></dt><dd>Copy pixels to another layer</dd>
         </dl>

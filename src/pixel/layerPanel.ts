@@ -6,6 +6,9 @@ const EYE_OPEN =
 const EYE_SHUT =
   '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M2 12s4 6 10 6 10-6 10-6M4 19l16-14" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
 
+const EYE_HALF =
+  '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7M1 12s4 7 11 7 11-7 11-7" fill="none" stroke="currentColor" stroke-width="2" opacity="0.5"/><path d="M1 12s4-7 11-7 11 7 11 7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8.5 12a3.5 3.5 0 0 1 7 0z" fill="currentColor"/></svg>';
+
 const ACTIONS = [
   { id: 'add', label: 'Add', title: 'Add a transparent layer above the active one' },
   { id: 'dup', label: 'Duplicate', title: 'Duplicate the active layer' },
@@ -57,7 +60,7 @@ export class LayerPanel {
   /** Re-renders when the layer list, a name, a visibility or the active layer changed. */
   refresh(): void {
     const { layers, activeIndex } = this.doc;
-    const key = layers.map((l) => `${l.id}|${l.name}|${l.visible ? 1 : 0}`).join('\n') + `#${activeIndex}`;
+    const key = layers.map((l) => `${l.id}|${l.name}|${l.visible ? 1 : 0}|${l.opacity ?? 1}`).join('\n') + `#${activeIndex}`;
     const actions = this.list.parentElement!.querySelectorAll<HTMLButtonElement>('.px-layer-actions button');
     for (const b of actions) {
       const id = b.dataset.action;
@@ -81,12 +84,17 @@ export class LayerPanel {
     const eye = document.createElement('button');
     eye.type = 'button';
     eye.className = 'px-eye';
-    eye.innerHTML = layer.visible ? EYE_OPEN : EYE_SHUT;
-    eye.title = layer.visible ? 'Hide layer' : 'Show layer';
-    eye.ariaPressed = String(layer.visible);
+    const half = layer.visible && (layer.opacity ?? 1) < 1;
+    eye.innerHTML = !layer.visible ? EYE_SHUT : half ? EYE_HALF : EYE_OPEN;
+    eye.title = !layer.visible
+      ? 'Hidden — click to show'
+      : half
+        ? '50% transparent (not exported) — click to hide'
+        : 'Visible — click for 50% transparent';
+    eye.ariaPressed = half ? 'mixed' : String(layer.visible);
     eye.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.doc.setVisible(i, !layer.visible);
+      this.doc.cycleVisibility(i);
     });
 
     const name = document.createElement('span');
