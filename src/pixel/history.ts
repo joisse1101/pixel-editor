@@ -5,6 +5,8 @@ export interface Layer {
   id: number;
   name: string;
   visible: boolean;
+  /** 0..1; omitted means fully opaque. Like visibility, not part of history. */
+  opacity?: number;
   px: Pixels;
 }
 
@@ -167,14 +169,16 @@ export class History {
   }
 
   /**
-   * Makes `state` current. Visibility is not part of history, so layers that still exist keep the
-   * visibility they have now rather than the one stored in the snapshot.
+   * Makes `state` current. Visibility and opacity are not part of history, so layers that still exist
+   * keep the ones they have now rather than those stored in the snapshot.
    */
   private restore(state: LayerState): void {
-    const current = new Map(this.holder.layers.map((l) => [l.id, l.visible]));
+    const current = new Map(this.holder.layers.map((l) => [l.id, l]));
     for (const l of state.layers) {
-      const visible = current.get(l.id);
-      if (visible !== undefined) l.visible = visible;
+      const now = current.get(l.id);
+      if (!now) continue;
+      l.visible = now.visible;
+      l.opacity = now.opacity;
     }
     this.holder.layers = state.layers.slice();
     this.holder.activeIndex = state.activeIndex;

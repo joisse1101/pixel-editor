@@ -275,11 +275,13 @@ export const blit = (dst: Pixels, src: Pixels, ox: number, oy: number): void => 
 
 export interface FlatLayer {
   visible: boolean;
+  /** Omitted means fully opaque. */
+  opacity?: number;
   px: Pixels;
 }
 
 /**
- * Visible layers composited bottom-first with source-over on straight RGBA; all layers share one size.
+ * Fully visible layers (not hidden, not half transparent) composited bottom-first with source-over on straight RGBA; all layers share one size.
  * The lowest visible layer is copied verbatim, so a single layer keeps even the colour of fully
  * transparent pixels.
  */
@@ -288,7 +290,7 @@ export function flatten(layers: readonly FlatLayer[]): Pixels {
   const d = out.data;
   let base = true;
   for (const layer of layers) {
-    if (!layer.visible) continue;
+    if (!layer.visible || (layer.opacity ?? 1) < 1) continue;
     const s = layer.px.data;
     if (base) {
       d.set(s);

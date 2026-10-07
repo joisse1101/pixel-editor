@@ -21,6 +21,7 @@ import {
 
 export const TRANSPARENT: Rgba = [0, 0, 0, 0];
 export const DEFAULT_SIZE = 32;
+const HALF_OPACITY = 0.5;
 
 /** Pixels lifted out of the image (or pasted) and being placed. */
 interface Floating {
@@ -134,6 +135,22 @@ export class PixelDocument implements ImageHolder {
     this.onChange();
   }
 
+  /** Cycles a layer shown (100%) → half transparent (50%) → hidden → shown. Not an undo step. */
+  cycleVisibility(index: number): void {
+    const layer = this.layers[index];
+    if (!layer) return;
+    if (!layer.visible) {
+      layer.visible = true;
+      layer.opacity = 1;
+    } else if ((layer.opacity ?? 1) === 1) {
+      layer.opacity = HALF_OPACITY;
+    } else {
+      layer.visible = false;
+      layer.opacity = 1;
+    }
+    this.onChange();
+  }
+
   /** A single fully transparent layer: nothing worth keeping, so an import replaces it. */
   get isBlank(): boolean {
     return this.layers.length === 1 && this.isLayerEmpty(0);
@@ -157,6 +174,7 @@ export class PixelDocument implements ImageHolder {
   duplicateLayer(): void {
     const src = this.activeLayer;
     const copy = this.makeLayer(`${src.name} copy`, clonePixels(src.px), src.visible);
+    copy.opacity = src.opacity;
     const at = this.activeIndex + 1;
     this.structure([...this.layers.slice(0, at), copy, ...this.layers.slice(at)], at);
   }

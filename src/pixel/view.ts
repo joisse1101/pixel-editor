@@ -341,7 +341,11 @@ export class PixelView {
     // Layers bottom to top; floating pixels sit just above the layer they belong to (the active one).
     const floating = this.doc.floating;
     this.doc.layers.forEach((layer, i) => {
-      if (layer.visible) ctx.drawImage(this.layerCanvases.get(layer.px)!.canvas, ox, oy, w * scale, h * scale);
+      if (layer.visible) {
+        ctx.globalAlpha = layer.opacity ?? 1;
+        ctx.drawImage(this.layerCanvases.get(layer.px)!.canvas, ox, oy, w * scale, h * scale);
+        ctx.globalAlpha = 1;
+      }
       if (floating && i === this.doc.activeIndex) {
         const r = floating.rect;
         ctx.drawImage(this.floatLayer, ox + r.x * scale, oy + r.y * scale, r.w * scale, r.h * scale);
