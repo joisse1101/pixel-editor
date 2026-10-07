@@ -9,6 +9,9 @@ const EYE_SHUT =
 const EYE_HALF =
   '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7M1 12s4 7 11 7 11-7 11-7" fill="none" stroke="currentColor" stroke-width="2" opacity="0.5"/><path d="M1 12s4-7 11-7 11 7 11 7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8.5 12a3.5 3.5 0 0 1 7 0z" fill="currentColor"/></svg>';
 
+const SAVE_ICON =
+  '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 3h13l3 3v15H4z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 3v6h8V3M8 21v-7h8v7" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+
 const ACTIONS = [
   { id: 'add', label: 'Add', title: 'Add a transparent layer above the active one' },
   { id: 'dup', label: 'Duplicate', title: 'Duplicate the active layer' },
@@ -26,6 +29,7 @@ export class LayerPanel {
   constructor(
     root: HTMLElement,
     private doc: PixelDocument,
+    private onSaveLayer: (index: number) => void = () => {},
   ) {
     root.innerHTML = `<h3>Layers</h3><div class="px-layer-list" role="listbox" aria-label="Layers"></div><div class="px-layer-actions"></div>`;
     this.list = root.querySelector('.px-layer-list')!;
@@ -60,7 +64,7 @@ export class LayerPanel {
   /** Re-renders when the layer list, a name, a visibility or the active layer changed. */
   refresh(): void {
     const { layers, activeIndex } = this.doc;
-    const key = layers.map((l) => `${l.id}|${l.name}|${l.visible ? 1 : 0}|${l.opacity ?? 1}`).join('\n') + `#${activeIndex}`;
+    const key = layers.map((l) => `${l.id}|${l.name}|${l.visible ? 1 : 0}|${l.opacity ?? 1}|${l.source ? 1 : 0}`).join('\n') + `#${activeIndex}`;
     const actions = this.list.parentElement!.querySelectorAll<HTMLButtonElement>('.px-layer-actions button');
     for (const b of actions) {
       const id = b.dataset.action;
@@ -103,7 +107,21 @@ export class LayerPanel {
     name.title = 'Double-click to rename';
     name.addEventListener('dblclick', () => this.rename(i, name));
 
-    row.append(eye, name);
+    row.append(eye);
+    if (layer.source) {
+      const save = document.createElement('button');
+      save.type = 'button';
+      save.className = 'px-layer-save';
+      save.innerHTML = SAVE_ICON;
+      save.title = `Save this layer to ${layer.source.name}`;
+      save.ariaLabel = save.title;
+      save.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.onSaveLayer(i);
+      });
+      row.append(save);
+    }
+    row.append(name);
     row.addEventListener('click', () => this.doc.setActive(i));
     return row;
   }

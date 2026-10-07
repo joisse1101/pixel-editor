@@ -1,4 +1,5 @@
 import type { Pixels } from '../model/pngCodec';
+import type { FileHandle } from '../io/files';
 import type { Rgba } from './ops';
 
 export interface Layer {
@@ -7,6 +8,8 @@ export interface Layer {
   visible: boolean;
   /** 0..1; omitted means fully opaque. Like visibility, not part of history. */
   opacity?: number;
+  /** File this layer was imported from, when the browser gave write access. In memory only; not part of history. */
+  source?: { handle: FileHandle; name: string };
   px: Pixels;
 }
 

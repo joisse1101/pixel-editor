@@ -233,7 +233,7 @@ export class PixelDocument implements ImageHolder {
    * layer is replaced and the canvas takes the first image size. One undo step. Returns whether the
    * canvas size changed. Throws, changing nothing, when the result would exceed the size limit.
    */
-  addLayers(images: { name: string; px: Pixels }[]): boolean {
+  addLayers(images: { name: string; px: Pixels; source?: Layer['source'] }[]): boolean {
     if (!images.length) return false;
     const adopt = this.isBlank;
     let w = adopt ? images[0].px.width : this.width;
@@ -249,7 +249,11 @@ export class PixelDocument implements ImageHolder {
     const grown = w !== this.width || h !== this.height;
     const top: Anchor = { ax: 0, ay: 0 };
     const kept = adopt ? [] : this.layers.map((l) => (grown ? { ...l, px: resizePixels(l.px, w, h, top) } : l));
-    const added = images.map((img) => this.makeLayer(img.name, resizePixels(img.px, w, h, top)));
+    const added = images.map((img) => {
+      const layer = this.makeLayer(img.name, resizePixels(img.px, w, h, top));
+      if (img.source) layer.source = img.source;
+      return layer;
+    });
     const layers = [...kept, ...added];
     this.history.snapshot({ layers, activeIndex: layers.length - 1 });
     if (adopt && wasClean) this.history.markSaved();
